@@ -7,7 +7,7 @@ issueTrackerURL="https://Anthony/sol_valheim/issues"
 modId = "${id}"
 version = "${version}"
 displayName = "${display_name}"
-authors = "Me!"
+authors = "vice, txnimc, AbyssLasea"
 description = '''
 '''
 logoFile = "icon.png"

@@ -17,7 +17,9 @@ public final class ClientEvents {
         SOLValheim.addTooltip(event.getItemStack(), event.getToolTip());
     }
     @SubscribeEvent public static void hideHunger(RenderGuiLayerEvent.Pre event) {
-        if (event.getName().equals(VanillaGuiLayers.FOOD_LEVEL)) event.setCanceled(true);
+        if (event.getName().equals(VanillaGuiLayers.FOOD_LEVEL)
+                || event.getName().equals(FarmersDelightCompat.NOURISHMENT)
+                || event.getName().getNamespace().equals("appleskin")) event.setCanceled(true);
     }
     @SubscribeEvent public static void logout(ClientPlayerNetworkEvent.LoggingOut event) {
 

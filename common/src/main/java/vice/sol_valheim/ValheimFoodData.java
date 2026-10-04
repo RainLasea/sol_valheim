@@ -16,6 +16,7 @@ public class ValheimFoodData
     public List<EatenFoodItem> ItemEntries = new ArrayList<>();
     public EatenFoodItem DrinkSlot;
     public int MaxItemSlots = SOLValheim.Config.common.maxSlots;
+    private int nourishmentProgress;
 
     public boolean eatItem(Item food)
     {
@@ -98,10 +99,21 @@ public class ValheimFoodData
     {
         ItemEntries.clear();
         DrinkSlot = null;
+        nourishmentProgress = 0;
     }
 
     public void tick()
     {
+        tick(false);
+    }
+
+    public void tick(boolean nourished)
+    {
+        if (!hasFood()) {
+            nourishmentProgress = 0;
+            return;
+        }
+        if (consumeTicks(1, nourished) == 0) return;
         for (var item : ItemEntries)
         {
             item.ticksLeft--;
@@ -173,6 +185,7 @@ public class ValheimFoodData
         int count = 0;
         tag.putInt("max_slots", MaxItemSlots);
         tag.putInt("count", ItemEntries.size());
+        tag.putInt("nourishment_progress", nourishmentProgress);
         for (var item : ItemEntries)
         {
             tag.putString("id" + count, BuiltInRegistries.ITEM.getKey(item.item).toString());
@@ -193,6 +206,7 @@ public class ValheimFoodData
         var instance = new ValheimFoodData();
 
         if (tag == null) return instance;
+        instance.nourishmentProgress = Math.clamp(tag.getInt("nourishment_progress"), 0, 19);
         int size = Math.min(Math.max(0, tag.getInt("count")), 5);
         for (int count = 0; count < size; count++) {
             var item = readItem(tag.getString("id" + count));
@@ -219,8 +233,27 @@ public class ValheimFoodData
     }
 
     public void passNight(long ticks) {
+        passNight(ticks, false);
+    }
+
+    public void passNight(long ticks, boolean nourished) {
+        if (!hasFood()) {
+            nourishmentProgress = 0;
+            return;
+        }
+        ticks = consumeTicks(Math.max(0, ticks), nourished);
         for (var item : ItemEntries) item.ticksLeft = (int) Math.min(item.ticksLeft, Math.max(1200L, item.ticksLeft - ticks));
         if (DrinkSlot != null) DrinkSlot.ticksLeft = (int) Math.min(DrinkSlot.ticksLeft, Math.max(1200L, DrinkSlot.ticksLeft - ticks));
+    }
+
+    private long consumeTicks(long ticks, boolean nourished) {
+        if (!nourished) {
+            nourishmentProgress = 0;
+            return ticks;
+        }
+        int partial = (int) (ticks % 20) * 11 + nourishmentProgress;
+        nourishmentProgress = partial % 20;
+        return ticks / 20 * 11 + partial / 20;
     }
 
     public static class EatenFoodItem {

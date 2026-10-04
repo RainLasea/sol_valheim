@@ -6,7 +6,7 @@ issueTrackerURL="https://github.com/txnimc/sol_valheim/issues"
 modId="sol_valheim"
 version="${mod_version}"
 displayName="SOL: Valheim"
-authors="vice, txnimc"
+authors="vice, txnimc, AbyssLasea"
 description="Food variety grants temporary health and regeneration, inspired by Valheim."
 [[mixins]]
 config="sol_valheim-common.mixins.json"

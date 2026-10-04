@@ -74,7 +74,7 @@ public final class PlayerEvents {
         }
         if (!player.isCreative() && !player.isSpectator()) {
             boolean wasActive = food.hasFood();
-            food.tick();
+            food.tick(FarmersDelightCompat.hasNourishment(player));
             if (wasActive && !food.hasFood()) accessor.sol_valheim$syncFoodData();
             long sinceHurt = player.level().getGameTime() - ((LivingEntityDamageAccessor) player).getLastDamageStamp();
             int interval = Math.max(1, Math.round(5 * SOLValheim.Config.common.regenSpeedModifier));
@@ -112,7 +112,8 @@ public final class PlayerEvents {
         if (!SOLValheim.Config.common.passTicksDuringNight || !(event.getLevel() instanceof ServerLevel level)) return;
         long elapsed = Math.max(0, event.getNewTime() - level.getDayTime());
         for (var player : level.players()) {
-            ((PlayerEntityMixinDataAccessor) player).sol_valheim$getFoodData().passNight(elapsed);
+            ((PlayerEntityMixinDataAccessor) player).sol_valheim$getFoodData()
+                    .passNight(elapsed, FarmersDelightCompat.hasNourishment(player));
             FoodNetworking.sync(player);
         }
     }
