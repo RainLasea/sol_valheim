@@ -1,121 +1,87 @@
 package vice.sol_valheim;
 
-import dev.architectury.registry.registries.DeferredRegister;
-import net.minecraft.ChatFormatting;
-
-#if PRE_CURRENT_MC_1_19_2
-import dev.architectury.registry.registries.Registries;
-import net.minecraft.core.Registry;
-#elif POST_CURRENT_MC_1_20_1
-import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.core.registries.Registries;
-#endif
-
-import net.minecraft.network.chat.Component;
-import net.minecraft.network.syncher.EntityDataSerializers;
-import net.minecraft.world.effect.MobEffect;
-import net.minecraft.world.entity.ai.attributes.AttributeModifier;
-import net.minecraft.world.item.*;
 import me.shedaniel.autoconfig.AutoConfig;
 import me.shedaniel.autoconfig.serializer.JanksonConfigSerializer;
 import me.shedaniel.autoconfig.serializer.PartitioningSerializer;
-
+import net.minecraft.ChatFormatting;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.effect.MobEffectInstance;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.item.UseAnim;
+import vice.sol_valheim.accessors.PlayerEntityMixinDataAccessor;
 import java.util.List;
+import java.util.Locale;
 
-public class SOLValheim
-{
+public final class SOLValheim {
+    public static final String MOD_ID = "sol_valheim";
+    public static ModConfig Config = new ModConfig();
+    public static ModConfig.Common remoteCommon;
+    public static final ResourceLocation HEALTH_MODIFIER = ResourceLocation.fromNamespaceAndPath(MOD_ID, "food_health");
+    public static final ResourceLocation SPEED_MODIFIER = ResourceLocation.fromNamespaceAndPath(MOD_ID, "food_speed");
 
+    public static void init() {
+        AutoConfig.register(ModConfig.class, PartitioningSerializer.wrap(JanksonConfigSerializer::new));
+        Config = AutoConfig.getConfigHolder(ModConfig.class).getConfig();
+        Config.validate();
+        AutoConfig.getConfigHolder(ModConfig.class).registerSaveListener((holder, config) -> {
+            config.validate();
+            if (remoteCommon != null && net.neoforged.neoforge.server.ServerLifecycleHooks.getCurrentServer() == null) {
+                var effective = new ModConfig();
+                effective.common = remoteCommon;
+                effective.client = config.client;
+                Config = effective;
+            } else Config = config;
+            return net.minecraft.world.InteractionResult.PASS;
+        });
+    }
 
-	#if PRE_CURRENT_MC_1_19_2
-	public static final DeferredRegister<Item> ITEMS = DeferredRegister.create("sol_valheim", Registry.ITEM_REGISTRY);
-	public static final DeferredRegister<MobEffect> MOB_EFFECTS = DeferredRegister.create("sol_valheim", Registry.MOB_EFFECT_REGISTRY);
-	#elif POST_CURRENT_MC_1_20_1
-    public static final DeferredRegister<Item> ITEMS = DeferredRegister.create("sol_valheim", Registries.ITEM);
-	public static final DeferredRegister<MobEffect> MOB_EFFECTS = DeferredRegister.create("sol_valheim", Registries.MOB_EFFECT);
-    #endif
+    public static void generateFoodConfigs() {
 
+        BuiltInRegistries.ITEM.forEach(ModConfig::getFoodConfig);
+        AutoConfig.getConfigHolder(ModConfig.class).save();
+    }
 
-	public static ModConfig Config;
-	public static final String MOD_ID = "sol_valheim";
+    public static void consume(Player player, ItemStack stack) {
+        if (player.level().isClientSide || player.isCreative() || player.isSpectator()) return;
+        var accessor = (PlayerEntityMixinDataAccessor) player;
+        var data = accessor.sol_valheim$getFoodData();
+        if (stack.is(Items.ROTTEN_FLESH)) {
+            data.clear();
+        } else if (data.eatItem(stack.getItem())) {
+            var food = ModConfig.getFoodConfig(stack.getItem());
+            for (var effect : food.extraEffects) {
+                var holder = effect.getEffect();
+                if (holder == null || !Float.isFinite(effect.duration) || effect.duration <= 0) continue;
+                int ticks = (int) Math.min(Integer.MAX_VALUE, food.getTime() * (double) effect.duration);
+                player.addEffect(new MobEffectInstance(holder, Math.max(1, ticks), Math.max(0, effect.amplifier - 1)));
+            }
+        }
+        accessor.sol_valheim$syncFoodData();
+    }
 
+    public static void addTooltip(ItemStack stack, List<Component> tooltip) {
+        if (stack.is(Items.ROTTEN_FLESH)) {
+            tooltip.add(Component.translatable("tooltip.sol_valheim.rotten_flesh").withStyle(ChatFormatting.GREEN));
+            return;
+        }
+        var food = ModConfig.getFoodConfig(stack.getItem());
+        if (food == null) return;
+        tooltip.add(Component.translatable("tooltip.sol_valheim.hearts", number(food.getHearts() / 2f)).withStyle(ChatFormatting.RED));
+        tooltip.add(Component.translatable("tooltip.sol_valheim.regen", number(food.getHealthRegen())).withStyle(ChatFormatting.DARK_RED));
+        tooltip.add(Component.translatable("tooltip.sol_valheim.duration", number(food.getTime() / 1200f)).withStyle(ChatFormatting.GOLD));
+        for (var effect : food.extraEffects) {
+            var holder = effect.getEffect();
+            if (holder != null) tooltip.add(Component.translatable("tooltip.sol_valheim.effect", holder.value().getDisplayName(), effect.amplifier).withStyle(ChatFormatting.GREEN));
+        }
+        if (stack.getUseAnimation() == UseAnim.DRINK)
+            tooltip.add(Component.translatable("tooltip.sol_valheim.refreshing").withStyle(ChatFormatting.AQUA));
+    }
 
-	private static AttributeModifier speedBuff;
-	public static AttributeModifier getSpeedBuffModifier() {
-		if (speedBuff == null)
-			speedBuff = new AttributeModifier("sol_valheim_speed_buff", Config.common.speedBoost, AttributeModifier.Operation.MULTIPLY_BASE);
-
-		return speedBuff;
-	}
-
-
-	public static void init() {
-		EntityDataSerializers.registerSerializer(ValheimFoodData.FOOD_DATA_SERIALIZER);
-
-		AutoConfig.register(ModConfig.class, PartitioningSerializer.wrap(JanksonConfigSerializer::new));
-		Config = AutoConfig.getConfigHolder(ModConfig.class).getConfig();
-
-		if (Config.common.foodConfigs.isEmpty())
-		{
-			System.out.println("Generating default food configs, this might take a second.");
-			long startTime = System.nanoTime();
-
-			#if PRE_CURRENT_MC_1_19_2
-			Registry.ITEM.forEach(ModConfig::getFoodConfig);
-			#elif POST_CURRENT_MC_1_20_1
-			BuiltInRegistries.ITEM.forEach(ModConfig::getFoodConfig);
-			#endif
-
-
-			AutoConfig.getConfigHolder(ModConfig.class).save();
-
-			long endTime = System.nanoTime();
-			long executionTime = (endTime - startTime) / 1000000;
-			System.out.println("Generating default food configs took " + executionTime + "ms.");
-		}
-
-//
-//		try	{
-//			var field = FoodProperties.class.getDeclaredField("canAlwaysEat");
-//			field.setBoolean(Items.ROTTEN_FLESH.getFoodProperties(), true);
-//		}
-//		catch (Exception e) {
-//			System.out.println(e);
-//		}
-	}
-
-
-
-	public static void addTooltip(ItemStack item, TooltipFlag flag, List<Component> list)
-	{
-		var food = item.getItem();
-		if (food == Items.ROTTEN_FLESH) {
-			list.add(Component.literal("☠ Empties Your Stomach!").withStyle(ChatFormatting.GREEN));
-			return;
-		}
-
-		var config = ModConfig.getFoodConfig(food);
-		if (config == null)
-			return;
-
-		var hearts = config.getHearts() % 2 == 0 ? config.getHearts() / 2 : String.format("%.1f", (float) config.getHearts() / 2f);
-		list.add(Component.literal("❤ " + hearts + " Heart" + (config.getHearts() / 2f > 1 ? "s" : "")).withStyle(ChatFormatting.RED));
-		list.add(Component.literal("☀ " + String.format("%.1f", config.getHealthRegen()) + " Regen").withStyle(ChatFormatting.DARK_RED));
-
-		var minutes = (float) config.getTime() / (20 * 60);
-
-		list.add(Component.literal("⌚ " + String.format("%.0f", minutes)  + " Minute" + (minutes > 1 ? "s" : "")).withStyle(ChatFormatting.GOLD));
-
-		for (var effect : config.extraEffects) {
-			var eff = effect.getEffect();
-			if (eff == null)
-				continue;
-
-			list.add(Component.literal("★ " + eff.getDisplayName().getString() + (effect.amplifier > 1 ? " " + effect.amplifier : "")).withStyle(ChatFormatting.GREEN));
-		}
-
-		if (item.getUseAnimation() == UseAnim.DRINK) {
-			list.add(Component.literal("❄ Refreshing!").withStyle(ChatFormatting.AQUA));
-
-		}
-	}
+    private static String number(float value) {
+        return value == (int) value ? Integer.toString((int) value) : String.format(Locale.ROOT, "%.1f", value);
+    }
 }
