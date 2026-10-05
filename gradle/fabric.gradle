@@ -1,0 +1,42 @@
+version = rootProject.mod_version
+group = rootProject.group
+base { archivesName = "sol_valheim-fabric-${targetMinecraft}" }
+def legacy = targetMinecraft == '1.20.1'
+def javaVersion = legacy ? 17 : 21
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(javaVersion)
+    withSourcesJar()
+}
+repositories {
+    maven { url = 'https://maven.shedaniel.me/' }
+    maven { url = 'https://maven.terraformersmc.com/releases/' }
+}
+dependencies {
+    minecraft "com.mojang:minecraft:${targetMinecraft}"
+    mappings loom.officialMojangMappings()
+    modImplementation "net.fabricmc:fabric-loader:${rootProject.fabric_loader_version}"
+    modImplementation "net.fabricmc.fabric-api:fabric-api:${legacy ? rootProject.fabric_api_1201 : rootProject.fabric_api_1211}"
+    modImplementation "me.shedaniel.cloth:cloth-config-fabric:${legacy ? rootProject.cloth_config_1201 : rootProject.cloth_config_version}"
+    modCompileOnly "com.terraformersmc:modmenu:${legacy ? '7.2.2' : '11.0.3'}"
+}
+sourceSets.main {
+    java.srcDirs = [rootProject.file('common/src/main/java'),
+                    rootProject.file("common/src/versions/${targetMinecraft}/java"),
+                    rootProject.file('fabric/src/main/java'),
+                    rootProject.file("fabric/src/versions/${targetMinecraft}/java")]
+    resources.srcDirs = [rootProject.file('common/src/main/resources'), rootProject.file('fabric/src/main/resources')]
+    resources.exclude '*.aw', '*.accesswidener'
+}
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.release = javaVersion
+}
+processResources {
+    def properties = [version: project.version, minecraft_version: targetMinecraft,
+                      fabric_loader: rootProject.fabric_loader_version, java_version: javaVersion]
+    inputs.properties properties
+    filesMatching('fabric.mod.json') { expand properties }
+    filesMatching('*mixins.json') {
+        filter { line -> line.replace('JAVA_21', "JAVA_${javaVersion}") }
+    }
+}

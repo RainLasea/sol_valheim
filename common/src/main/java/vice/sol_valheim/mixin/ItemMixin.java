@@ -1,6 +1,5 @@
 package vice.sol_valheim.mixin;
 
-import net.minecraft.core.component.DataComponents;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResultHolder;
 import net.minecraft.world.entity.player.Player;
@@ -19,11 +18,11 @@ public class ItemMixin {
     @Inject(method = "use", at = @At("HEAD"), cancellable = true)
     private void valheimCanEat(Level level, Player player, InteractionHand hand, CallbackInfoReturnable<InteractionResultHolder<ItemStack>> cir) {
         var stack = player.getItemInHand(hand);
-        var food = stack.get(DataComponents.FOOD);
+        var food = vice.sol_valheim.platform.Platform.foodProperties(stack, player);
 
         if (food == null || food.canAlwaysEat() || player.isCreative() || player.isSpectator()) return;
         var data = ((PlayerEntityMixinDataAccessor) player).sol_valheim$getFoodData();
-        if (stack.is(Items.ROTTEN_FLESH) || data.canEat(stack.getItem())) {
+        if (stack.is(Items.ROTTEN_FLESH) || data.canEat(stack, player)) {
             player.startUsingItem(hand);
             cir.setReturnValue(InteractionResultHolder.consume(stack));
         } else cir.setReturnValue(InteractionResultHolder.fail(stack));

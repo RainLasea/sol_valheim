@@ -1,0 +1,5 @@
+plugins {
+    id 'fabric-loom'
+}
+ext.targetMinecraft = '1.20.1'
+apply from: rootProject.file('gradle/fabric.gradle')

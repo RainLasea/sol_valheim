@@ -10,7 +10,7 @@ import org.spongepowered.asm.mixin.injection.*;
 public abstract class GuiMixin
 {
     @Shadow
-    protected abstract int getVehicleMaxHearts(LivingEntity livingEntity);
+    private int getVehicleMaxHearts(LivingEntity livingEntity) { throw new AssertionError(); }
 
     @Redirect(method = "renderPlayerHealth", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/gui/Gui;getVehicleMaxHearts(Lnet/minecraft/world/entity/LivingEntity;)I"))
     private int sol_valheim$getVehicleMaxHearts(Gui instance, LivingEntity vehicle)
@@ -20,6 +20,10 @@ public abstract class GuiMixin
              return original;
 
          return -1;
+    }
+    @org.spongepowered.asm.mixin.injection.Inject(method = "renderPlayerHealth", at = @At("TAIL"))
+    private void renderSlots(net.minecraft.client.gui.GuiGraphics graphics, org.spongepowered.asm.mixin.injection.callback.CallbackInfo ci) {
+        vice.sol_valheim.FoodHUD.render(graphics);
     }
 }
 

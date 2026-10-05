@@ -21,7 +21,7 @@ public final class FoodNetworking {
     public static void register(RegisterPayloadHandlersEvent event) {
         var registrar = event.registrar("1");
         registrar.playToClient(FoodState.TYPE, FoodState.CODEC, (payload, context) ->
-                ((PlayerEntityMixinDataAccessor) context.player()).sol_valheim$setFoodData(ValheimFoodData.read(payload.data())));
+                ((PlayerEntityMixinDataAccessor) context.player()).sol_valheim$setFoodData(ValheimFoodData.read(payload.data(), context.player().registryAccess())));
         registrar.playToClient(CommonConfig.TYPE, CommonConfig.CODEC, (payload, context) -> applyConfig(payload));
     }
     public static void applyConfig(CommonConfig payload) {
@@ -35,7 +35,7 @@ public final class FoodNetworking {
     }
     public static void sync(Player player) {
         if (player instanceof ServerPlayer serverPlayer)
-            PacketDistributor.sendToPlayer(serverPlayer, new FoodState(((PlayerEntityMixinDataAccessor) player).sol_valheim$getFoodData().save(new CompoundTag())));
+            PacketDistributor.sendToPlayer(serverPlayer, new FoodState(((PlayerEntityMixinDataAccessor) player).sol_valheim$getFoodData().save(new CompoundTag(), player.registryAccess())));
     }
     public static void syncConfig(ServerPlayer player) {
         PacketDistributor.sendToPlayer(player, new CommonConfig(GSON.toJson(SOLValheim.Config.common)));

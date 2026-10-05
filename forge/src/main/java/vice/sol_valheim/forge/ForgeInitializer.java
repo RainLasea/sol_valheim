@@ -1,16 +1,15 @@
 package vice.sol_valheim.forge;
-
-import dev.architectury.platform.forge.EventBuses;
-import vice.sol_valheim.SOLValheim;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
-
+import net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent;
+import net.minecraftforge.common.MinecraftForge;
+import vice.sol_valheim.SOLValheim;
 @Mod(SOLValheim.MOD_ID)
-public class ForgeInitializer
-{
+public final class ForgeInitializer {
     public ForgeInitializer() {
-		// Submit our event bus to let architectury register our content on the right time
-        EventBuses.registerModEventBus(SOLValheim.MOD_ID, FMLJavaModLoadingContext.get().getModEventBus());
-        SOLValheim.init();
+        SOLValheim.init(); FoodNetworking.register();
+        FMLJavaModLoadingContext.get().getModEventBus().addListener(this::setup);
+        MinecraftForge.EVENT_BUS.register(new PlayerEvents());
     }
+    private void setup(FMLCommonSetupEvent event) { event.enqueueWork(SOLValheim::generateFoodConfigs); }
 }

@@ -12,7 +12,7 @@ public class LocalPlayerMixin {
     @Inject(method = "hasEnoughFoodToStartSprinting", at = @At("HEAD"), cancellable = true)
     private void valheimSprint(CallbackInfoReturnable<Boolean> cir) {
         var player = (LocalPlayer) (Object) this;
-        cir.setReturnValue(player.isPassenger() || player.mayFly()
+        cir.setReturnValue(player.isPassenger() || vice.sol_valheim.platform.Platform.mayFly(player)
                 || player.tickCount < (long) SOLValheim.Config.common.respawnGracePeriod * 20
                 || ((PlayerEntityMixinDataAccessor) player).sol_valheim$getFoodData().hasFood());
     }

@@ -1,0 +1,66 @@
+import groovy.json.JsonSlurper
+import java.util.zip.ZipFile
+
+// Catch packaging mistakes that compilation alone cannot detect.
+tasks.register('verifyArtifacts') {
+    dependsOn 'collectJars'
+    inputs.dir layout.buildDirectory.dir('distributions')
+    doLast {
+        def targets = [
+            ['fabric', '1.21.1', 65, 'fabric.mod.json'],
+            ['neoforge', '1.21.1', 65, 'META-INF/neoforge.mods.toml'],
+            ['fabric', '1.20.1', 61, 'fabric.mod.json'],
+            ['forge', '1.20.1', 61, 'META-INF/mods.toml']
+        ]
+        def directory = layout.buildDirectory.dir('distributions').get().asFile
+        def expectedNames = targets.collect { "sol_valheim-${it[0]}-${it[1]}-${project.version}.jar".toString() } as Set
+        if ((directory.listFiles().findAll { it.name.endsWith('.jar') }.collect { it.name } as Set) != expectedNames)
+            throw new GradleException('Expected exactly four release jars in build/distributions')
+        targets.each { loader, minecraft, major, metadata ->
+            def jarFile = new File(directory, "sol_valheim-${loader}-${minecraft}-${project.version}.jar")
+            new ZipFile(jarFile).withCloseable { zip ->
+                def read = { String name ->
+                    def entry = zip.getEntry(name)
+                    if (entry == null) throw new GradleException("${jarFile.name}: missing ${name}")
+                    zip.getInputStream(entry).withCloseable { it.bytes }
+                }
+                def info = new String(read(metadata), 'UTF-8')
+                if (info.contains('${') || !info.contains(project.version.toString()) || !info.contains(minecraft))
+                    throw new GradleException("${jarFile.name}: incorrect or unexpanded metadata")
+                def mixinConfigs = ['sol_valheim-common.mixins.json']
+                if (loader == 'fabric') {
+                    def mod = new JsonSlurper().parseText(info)
+                    if (mod.depends.minecraft != minecraft)
+                        throw new GradleException("${jarFile.name}: wrong Minecraft dependency")
+                    mod.entrypoints.values().flatten().each { read(it.replace('.', '/') + '.class') }
+                    mixinConfigs.add('sol_valheim.mixins.json')
+                    def playerMixin = new String(read('vice/sol_valheim/mixin/PlayerEntityMixin.class'), 'ISO-8859-1')
+                    if (!playerMixin.contains('net/minecraft/class_1657'))
+                        throw new GradleException("${jarFile.name}: Fabric jar was not remapped to intermediary")
+                }
+                mixinConfigs.each { name ->
+                    def config = new JsonSlurper().parseText(new String(read(name), 'UTF-8'))
+                    if (config.compatibilityLevel != (major == 61 ? 'JAVA_17' : 'JAVA_21'))
+                        throw new GradleException("${jarFile.name}: wrong Mixin Java level")
+                    (config.mixins + config.client).each { read((config.package + '.' + it).replace('.', '/') + '.class') }
+                    if (loader == 'forge') {
+                        def refmap = new JsonSlurper().parseText(new String(read(config.refmap), 'UTF-8'))
+                        if (!refmap.data.searge) throw new GradleException("${jarFile.name}: missing SRG refmap")
+                    }
+                }
+                zip.entries().each { entry ->
+                    if (entry.name.endsWith('.class')) {
+                        def bytes = read(entry.name)
+                        int classMajor = ((bytes[6] & 0xff) << 8) | (bytes[7] & 0xff)
+                        if (classMajor != major) throw new GradleException("${jarFile.name}: incompatible Java class ${entry.name}")
+                        ['fabric', 'forge', 'neoforge'].findAll { it != loader }.each { foreignLoader ->
+                            if (entry.name.startsWith("vice/sol_valheim/${foreignLoader}/"))
+                                throw new GradleException("${jarFile.name}: contains another loader's classes")
+                        }
+                    }
+                }
+            }
+            logger.lifecycle("Verified ${jarFile.name}")
+        }
+    }
+}

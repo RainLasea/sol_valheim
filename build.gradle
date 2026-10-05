@@ -1,10 +1,12 @@
 plugins {
     id 'java-library'
     id 'net.neoforged.moddev' version '2.0.144'
+    id 'net.neoforged.moddev.legacyforge' version '2.0.144' apply false
+    id 'fabric-loom' version '1.14.10' apply false
 }
 version = mod_version
 group = 'vice.sol_valheim'
-base { archivesName = 'sol_valheim-neoforge' }
+base { archivesName = 'sol_valheim-neoforge-1.21.1' }
 java {
     toolchain.languageVersion = JavaLanguageVersion.of(21)
     withSourcesJar()
@@ -14,7 +16,7 @@ repositories {
     maven { url = 'https://maven.shedaniel.me/' }
 }
 sourceSets.main {
-    java.srcDirs = ['common/src/main/java', 'neoforge/src/main/java']
+    java.srcDirs = ['common/src/main/java', 'common/src/versions/1.21.1/java', 'neoforge/src/main/java']
     resources.srcDirs = ['common/src/main/resources', 'neoforge/src/main/resources']
     resources.exclude '*.aw', '*.accesswidener'
 }
@@ -29,9 +31,16 @@ neoForge {
             sourceSet sourceSets.main
         }
     }
+    unitTest {
+        enable()
+        testedMod = mods.sol_valheim
+    }
 }
 dependencies {
     implementation "me.shedaniel.cloth:cloth-config-neoforge:${cloth_config_version}"
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
+    testImplementation 'org.mockito:mockito-core:5.11.0'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
@@ -43,3 +52,18 @@ processResources {
         expand mod_version: project.mod_version
     }
 }
+
+test { useJUnitPlatform() }
+
+// Collect installable jars after loader-specific remapping completes.
+tasks.register('collectJars', Sync) {
+    dependsOn tasks.named('jar'), ':fabric:build', ':fabric1201:build', ':forge:build'
+    into layout.buildDirectory.dir('distributions')
+    from(tasks.named('jar').flatMap { it.archiveFile })
+    from(provider { project(':fabric').tasks.named('remapJar').get().archiveFile.get() })
+    from(provider { project(':fabric1201').tasks.named('remapJar').get().archiveFile.get() })
+    from(provider { project(':forge').tasks.named('reobfJar').get().archiveFile.get() })
+}
+tasks.named('build') { dependsOn 'collectJars' }
+apply from: 'gradle/verify-artifacts.gradle'
+tasks.named('build') { dependsOn 'verifyArtifacts' }

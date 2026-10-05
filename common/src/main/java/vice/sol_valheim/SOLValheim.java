@@ -1,7 +1,6 @@
 package vice.sol_valheim;
 
 import me.shedaniel.autoconfig.AutoConfig;
-import me.shedaniel.autoconfig.serializer.JanksonConfigSerializer;
 import me.shedaniel.autoconfig.serializer.PartitioningSerializer;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -20,16 +19,16 @@ public final class SOLValheim {
     public static final String MOD_ID = "sol_valheim";
     public static ModConfig Config = new ModConfig();
     public static ModConfig.Common remoteCommon;
-    public static final ResourceLocation HEALTH_MODIFIER = ResourceLocation.fromNamespaceAndPath(MOD_ID, "food_health");
-    public static final ResourceLocation SPEED_MODIFIER = ResourceLocation.fromNamespaceAndPath(MOD_ID, "food_speed");
+    public static final ResourceLocation HEALTH_MODIFIER = ResourceLocation.tryParse(MOD_ID + ":food_health");
+    public static final ResourceLocation SPEED_MODIFIER = ResourceLocation.tryParse(MOD_ID + ":food_speed");
 
     public static void init() {
-        AutoConfig.register(ModConfig.class, PartitioningSerializer.wrap(JanksonConfigSerializer::new));
+        AutoConfig.register(ModConfig.class, PartitioningSerializer.wrap(ReadableConfigSerializer::new));
         Config = AutoConfig.getConfigHolder(ModConfig.class).getConfig();
         Config.validate();
         AutoConfig.getConfigHolder(ModConfig.class).registerSaveListener((holder, config) -> {
             config.validate();
-            if (remoteCommon != null && net.neoforged.neoforge.server.ServerLifecycleHooks.getCurrentServer() == null) {
+            if (remoteCommon != null && !vice.sol_valheim.platform.Platform.serverRunning()) {
                 var effective = new ModConfig();
                 effective.common = remoteCommon;
                 effective.client = config.client;
@@ -51,24 +50,28 @@ public final class SOLValheim {
         var data = accessor.sol_valheim$getFoodData();
         if (stack.is(Items.ROTTEN_FLESH)) {
             data.clear();
-        } else if (data.eatItem(stack.getItem())) {
-            var food = ModConfig.getFoodConfig(stack.getItem());
+        } else if (data.eatItem(stack, player)) {
+            var food = ModConfig.getFoodConfig(stack, player);
             for (var effect : food.extraEffects) {
                 var holder = effect.getEffect();
                 if (holder == null || !Float.isFinite(effect.duration) || effect.duration <= 0) continue;
                 int ticks = (int) Math.min(Integer.MAX_VALUE, food.getTime() * (double) effect.duration);
-                player.addEffect(new MobEffectInstance(holder, Math.max(1, ticks), Math.max(0, effect.amplifier - 1)));
+                player.addEffect(GameVersion.effectInstance(holder, Math.max(1, ticks), Math.max(0, effect.amplifier - 1)));
             }
         }
         accessor.sol_valheim$syncFoodData();
     }
 
     public static void addTooltip(ItemStack stack, List<Component> tooltip) {
+        addTooltip(stack, tooltip, null);
+    }
+
+    public static void addTooltip(ItemStack stack, List<Component> tooltip, Player player) {
         if (stack.is(Items.ROTTEN_FLESH)) {
             tooltip.add(Component.translatable("tooltip.sol_valheim.rotten_flesh").withStyle(ChatFormatting.GREEN));
             return;
         }
-        var food = ModConfig.getFoodConfig(stack.getItem());
+        var food = ModConfig.getFoodConfig(stack, player);
         if (food == null) return;
         tooltip.add(Component.translatable("tooltip.sol_valheim.hearts", number(food.getHearts() / 2f)).withStyle(ChatFormatting.RED));
         tooltip.add(Component.translatable("tooltip.sol_valheim.regen", number(food.getHealthRegen())).withStyle(ChatFormatting.DARK_RED));

@@ -1,9 +1,13 @@
 package vice.sol_valheim;
 
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.Tag;
+import net.minecraft.core.HolderLookup;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.UseAnim;
 
@@ -20,41 +24,53 @@ public class ValheimFoodData
 
     public boolean eatItem(Item food)
     {
-        if (food == Items.ROTTEN_FLESH)
+        return eatItem(food.getDefaultInstance(), null);
+    }
+
+    public boolean eatItem(ItemStack stack, LivingEntity entity)
+    {
+        if (stack.is(Items.ROTTEN_FLESH))
             return false;
 
-        var config = ModConfig.getFoodConfig(food);
+        var config = ModConfig.getFoodConfig(stack, entity);
         if (config == null)
             return false;
 
-        var isDrink = food.getDefaultInstance().getUseAnimation() == UseAnim.DRINK;
+        var isDrink = stack.getUseAnimation() == UseAnim.DRINK;
         if (isDrink) {
             if (DrinkSlot != null && !DrinkSlot.canEatEarly())
                 return false;
 
+            if (DrinkSlot == null && ItemEntries.size() >= MaxItemSlots) {
+                var replaceable = ItemEntries.stream().filter(EatenFoodItem::canEatEarly).findFirst().orElse(null);
+                if (replaceable == null) return false;
+                ItemEntries.remove(replaceable);
+            }
+
             if (DrinkSlot == null)
-                DrinkSlot = new EatenFoodItem(food, config.getTime());
+                DrinkSlot = new EatenFoodItem(stack, config.getTime(), config);
             else {
                 DrinkSlot.ticksLeft = config.getTime();
-                DrinkSlot.item = food;
+                DrinkSlot.setFood(stack, config);
             }
 
             return true;
         }
 
-        var existing = getEatenFood(food);
+        var existing = getEatenFood(stack, config);
         if (existing != null)
         {
             if (!existing.canEatEarly())
                 return false;
 
             existing.ticksLeft = config.getTime();
+            existing.setFood(stack, config);
             return true;
         }
 
-        if (ItemEntries.size() < MaxItemSlots)
+        if (ItemEntries.size() < foodSlotCapacity())
         {
-            ItemEntries.add(new EatenFoodItem(food, config.getTime()));
+            ItemEntries.add(new EatenFoodItem(stack, config.getTime(), config));
             return true;
         }
 
@@ -63,29 +79,53 @@ public class ValheimFoodData
             if (item.canEatEarly())
             {
                 item.ticksLeft = config.getTime();
-                item.item = food;
+                item.setFood(stack, config);
                 return true;
             }
+        }
+        if (DrinkSlot != null && DrinkSlot.canEatEarly()) {
+            DrinkSlot = null;
+            ItemEntries.add(new EatenFoodItem(stack, config.getTime(), config));
+            return true;
         }
         return false;
     }
 
     public boolean canEat(Item food)
     {
-        if (food == Items.ROTTEN_FLESH)
+        return canEat(food.getDefaultInstance(), null);
+    }
+
+    public boolean canEat(ItemStack stack, LivingEntity entity)
+    {
+        if (stack.is(Items.ROTTEN_FLESH))
             return true;
 
-        if (food.getDefaultInstance().getUseAnimation() == UseAnim.DRINK)
-            return DrinkSlot == null || DrinkSlot.canEatEarly();
+        var config = ModConfig.getFoodConfig(stack, entity);
+        if (config == null) return false;
+        if (stack.getUseAnimation() == UseAnim.DRINK)
+            return DrinkSlot != null ? DrinkSlot.canEatEarly()
+                    : ItemEntries.size() < MaxItemSlots || ItemEntries.stream().anyMatch(EatenFoodItem::canEatEarly);
 
-        var existing = getEatenFood(food);
+        var existing = getEatenFood(stack, config);
         if (existing != null)
             return existing.canEatEarly();
 
-        if (ItemEntries.size() < MaxItemSlots)
+        if (ItemEntries.size() < foodSlotCapacity())
             return true;
 
-        return ItemEntries.stream().anyMatch(EatenFoodItem::canEatEarly);
+        return ItemEntries.stream().anyMatch(EatenFoodItem::canEatEarly)
+                || DrinkSlot != null && DrinkSlot.canEatEarly();
+    }
+
+    private int foodSlotCapacity() {
+        return Math.max(0, MaxItemSlots - (DrinkSlot == null ? 0 : 1));
+    }
+
+    public void setMaxSlots(int slots) {
+        MaxItemSlots = net.minecraft.util.Mth.clamp(slots, 2, 5);
+        int capacity = foodSlotCapacity();
+        if (ItemEntries.size() > capacity) ItemEntries.subList(capacity, ItemEntries.size()).clear();
     }
 
     public EatenFoodItem getEatenFood(Item food) {
@@ -95,11 +135,37 @@ public class ValheimFoodData
                 .orElse(null);
     }
 
+    private EatenFoodItem getEatenFood(ItemStack stack, ModConfig.Common.FoodConfig config) {
+        boolean dynamic = config != ModConfig.getFoodConfig(stack.getItem());
+        return ItemEntries.stream().filter(entry -> entry.item == stack.getItem()
+                && (!(dynamic || entry.dynamicConfig != null) || sameFoodComponents(entry.stack, stack)))
+                .findFirst().orElse(null);
+    }
+
+    private static boolean sameFoodComponents(ItemStack first, ItemStack second) {
+        // Cosmetic names and lore must not turn the same recipe into another food slot.
+        return GameVersion.sameFoodComponents(first, second);
+    }
+
     public void clear()
     {
         ItemEntries.clear();
         DrinkSlot = null;
         nourishmentProgress = 0;
+    }
+
+    public void applyDeathPenalty() {
+        nourishmentProgress = 0;
+        ItemEntries.removeIf(item -> !retainAfterDeath(item));
+        if (DrinkSlot != null && !retainAfterDeath(DrinkSlot)) DrinkSlot = null;
+    }
+
+    private static boolean retainAfterDeath(EatenFoodItem item) {
+        var config = item.getConfig();
+        // Check the pre-death timer against the full duration, then keep one fifth.
+        if (config == null || (long) item.ticksLeft * 5 < config.getTime()) return false;
+        item.ticksLeft /= 5;
+        return item.ticksLeft > 0;
     }
 
     public void tick()
@@ -134,7 +200,7 @@ public class ValheimFoodData
         float nutrition = 0f;
         for (var item : ItemEntries)
         {
-            ModConfig.Common.FoodConfig food = ModConfig.getFoodConfig(item.item);
+            ModConfig.Common.FoodConfig food = item.getConfig();
             if (food == null)
                 continue;
 
@@ -143,7 +209,7 @@ public class ValheimFoodData
 
         if (DrinkSlot != null)
         {
-            ModConfig.Common.FoodConfig food = ModConfig.getFoodConfig(DrinkSlot.item);
+            ModConfig.Common.FoodConfig food = DrinkSlot.getConfig();
             if (food != null)
             {
                 nutrition += food.getHearts();
@@ -160,7 +226,7 @@ public class ValheimFoodData
         float regen = 0.25f;
         for (var item : ItemEntries)
         {
-            ModConfig.Common.FoodConfig food = ModConfig.getFoodConfig(item.item);
+            ModConfig.Common.FoodConfig food = item.getConfig();
             if (food == null)
                 continue;
 
@@ -169,7 +235,7 @@ public class ValheimFoodData
 
         if (DrinkSlot != null)
         {
-            ModConfig.Common.FoodConfig food = ModConfig.getFoodConfig(DrinkSlot.item);
+            ModConfig.Common.FoodConfig food = DrinkSlot.getConfig();
             if (food != null)
             {
                 regen += food.getHealthRegen();
@@ -181,7 +247,7 @@ public class ValheimFoodData
         return regen;
     }
 
-    public CompoundTag save(CompoundTag tag) {
+    public CompoundTag save(CompoundTag tag, HolderLookup.Provider registries) {
         int count = 0;
         tag.putInt("max_slots", MaxItemSlots);
         tag.putInt("count", ItemEntries.size());
@@ -190,6 +256,8 @@ public class ValheimFoodData
         {
             tag.putString("id" + count, BuiltInRegistries.ITEM.getKey(item.item).toString());
             tag.putInt("ticks" + count, item.ticksLeft);
+            tag.put("stack" + count, GameVersion.saveStack(item.stack, registries));
+            if (item.dynamicConfig != null) tag.put("values" + count, saveValues(item.dynamicConfig));
             count++;
         }
 
@@ -197,35 +265,65 @@ public class ValheimFoodData
         {
             tag.putString("drink", BuiltInRegistries.ITEM.getKey(DrinkSlot.item).toString());
             tag.putInt("drinkticks", DrinkSlot.ticksLeft);
+            tag.put("drinkstack", GameVersion.saveStack(DrinkSlot.stack, registries));
+            if (DrinkSlot.dynamicConfig != null) tag.put("drinkvalues", saveValues(DrinkSlot.dynamicConfig));
         }
 
         return tag;
     }
 
-    public static ValheimFoodData read(CompoundTag tag) {
+    public static ValheimFoodData read(CompoundTag tag, HolderLookup.Provider registries) {
         var instance = new ValheimFoodData();
 
         if (tag == null) return instance;
-        instance.nourishmentProgress = Math.clamp(tag.getInt("nourishment_progress"), 0, 19);
+        instance.nourishmentProgress = net.minecraft.util.Mth.clamp(tag.getInt("nourishment_progress"), 0, 19);
         int size = Math.min(Math.max(0, tag.getInt("count")), 5);
         for (int count = 0; count < size; count++) {
-            var item = readItem(tag.getString("id" + count));
+            var stack = readStack(tag, "stack" + count, "id" + count, registries);
+            var config = readValues(tag, "values" + count, stack);
             int ticks = tag.getInt("ticks" + count);
-            if (item != null && ticks > 0 && instance.getEatenFood(item) == null
+            if (config != null && ticks > 0 && instance.getEatenFood(stack, config) == null
                     && instance.ItemEntries.size() < instance.MaxItemSlots)
-                instance.ItemEntries.add(new EatenFoodItem(item, ticks));
+                instance.ItemEntries.add(new EatenFoodItem(stack, ticks, config));
         }
-        var drink = readItem(tag.getString("drink"));
+        var drink = readStack(tag, "drinkstack", "drink", registries);
+        var config = readValues(tag, "drinkvalues", drink);
         int ticks = tag.getInt("drinkticks");
-        if (drink != null && ticks > 0) instance.DrinkSlot = new EatenFoodItem(drink, ticks);
+        if (config != null && ticks > 0) instance.DrinkSlot = new EatenFoodItem(drink, ticks, config);
+        instance.setMaxSlots(SOLValheim.Config.common.maxSlots);
         return instance;
     }
 
-    private static Item readItem(String value) {
-        var id = ResourceLocation.tryParse(value);
-        if (id == null || !BuiltInRegistries.ITEM.containsKey(id)) return null;
-        var item = BuiltInRegistries.ITEM.get(id);
-        return ModConfig.getFoodConfig(item) == null ? null : item;
+    private static ItemStack readStack(CompoundTag tag, String stackKey, String legacyKey, HolderLookup.Provider registries) {
+        if (tag.contains(stackKey, Tag.TAG_COMPOUND))
+            return GameVersion.readStack(tag.getCompound(stackKey), registries);
+        var id = ResourceLocation.tryParse(tag.getString(legacyKey));
+        if (id == null || !BuiltInRegistries.ITEM.containsKey(id)) return ItemStack.EMPTY;
+        return BuiltInRegistries.ITEM.get(id).getDefaultInstance();
+    }
+
+    private static CompoundTag saveValues(ModConfig.Common.FoodConfig config) {
+        var values = new CompoundTag();
+        values.putInt("nutrition", config.nutrition);
+        values.putFloat("saturation", config.saturationModifier);
+        values.putFloat("regen", config.healthRegenModifier);
+        return values;
+    }
+
+    private static ModConfig.Common.FoodConfig readValues(CompoundTag tag, String key, ItemStack stack) {
+        if (stack.isEmpty()) return null;
+        var config = ModConfig.getFoodConfig(stack, null);
+        if (!tag.contains(key, Tag.TAG_COMPOUND)) return config;
+        var values = tag.getCompound(key);
+        var saved = config == null ? new ModConfig.Common.FoodConfig() : config.copy();
+        saved.nutrition = net.minecraft.util.Mth.clamp(values.getInt("nutrition"), 0, 1000);
+        saved.saturationModifier = finiteValue(values.getFloat("saturation"), 0, 100);
+        saved.healthRegenModifier = finiteValue(values.getFloat("regen"), 0, 100);
+        return saved;
+    }
+
+    private static float finiteValue(float value, float min, float max) {
+        return Float.isFinite(value) ? net.minecraft.util.Mth.clamp(value, min, max) : 1f;
     }
 
     public boolean hasFood() {
@@ -258,13 +356,19 @@ public class ValheimFoodData
 
     public static class EatenFoodItem {
         public Item item;
+        public ItemStack stack;
         public int ticksLeft;
+        private ModConfig.Common.FoodConfig dynamicConfig;
+
+        public ModConfig.Common.FoodConfig getConfig() {
+            return dynamicConfig != null ? dynamicConfig : ModConfig.getFoodConfig(item);
+        }
 
         public boolean canEatEarly() {
             if (ticksLeft < 1200)
                 return true;
 
-            var config = ModConfig.getFoodConfig(item);
+            var config = getConfig();
             if (config == null)
                 return false;
 
@@ -273,13 +377,25 @@ public class ValheimFoodData
 
         public EatenFoodItem(Item item, int ticksLeft)
         {
-            this.item = item;
+            this(item.getDefaultInstance(), ticksLeft, ModConfig.getFoodConfig(item));
+        }
+
+        public EatenFoodItem(ItemStack stack, int ticksLeft, ModConfig.Common.FoodConfig config) {
+            setFood(stack, config);
             this.ticksLeft = ticksLeft;
+        }
+
+        private void setFood(ItemStack stack, ModConfig.Common.FoodConfig config) {
+            this.item = stack.getItem();
+            this.stack = stack.copyWithCount(1);
+            this.dynamicConfig = config == ModConfig.getFoodConfig(item) ? null : config.copy();
         }
 
         public EatenFoodItem(EatenFoodItem eaten)
         {
             this.item = eaten.item;
+            this.stack = eaten.stack.copy();
+            this.dynamicConfig = eaten.dynamicConfig == null ? null : eaten.dynamicConfig.copy();
             this.ticksLeft = eaten.ticksLeft;
         }
     }

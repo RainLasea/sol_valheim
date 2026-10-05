@@ -2,11 +2,15 @@
   "required": true,
   "minVersion": "0.8",
   "package": "vice.sol_valheim.fabric.mixin",
-  "compatibilityLevel": "JAVA_17",
+  "compatibilityLevel": "JAVA_21",
   "mixins": [
+    "LivingEntityMixin",
+    "ServerLevelMixin",
+    "ServerPlayerMixin"
   ],
   "client": [
-    "GuiMixin"
+    "GuiMixin",
+    "ClientPacketListenerMixin"
   ],
   "injectors": {
     "defaultRequire": 1

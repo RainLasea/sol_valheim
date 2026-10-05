@@ -9,13 +9,14 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.effect.MobEffect;
 import net.minecraft.world.food.FoodProperties;
 import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.UseAnim;
 
 import java.util.ArrayList;
 import java.util.Map;
 import net.minecraft.core.Holder;
-import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.BuiltInRegistries;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -26,7 +27,8 @@ public class ModConfig extends PartitioningSerializer.GlobalData {
 
     public static Common.FoodConfig getFoodConfig(Item item) {
         var isDrink = item.getDefaultInstance().getUseAnimation() == UseAnim.DRINK;
-        if(item != Items.CAKE && !item.getDefaultInstance().has(DataComponents.FOOD) && !isDrink)
+        var properties = vice.sol_valheim.platform.Platform.foodProperties(item.getDefaultInstance(), null);
+        if(item != Items.CAKE && properties == null && !isDrink)
             return null;
 
         var existing = SOLValheim.Config.common.foodConfigs.get(BuiltInRegistries.ITEM.getKey(item).toString());
@@ -35,25 +37,25 @@ public class ModConfig extends PartitioningSerializer.GlobalData {
             var registry = BuiltInRegistries.ITEM.getKey(item).toString();
 
             var food = item == Items.CAKE
-                    ? new FoodProperties.Builder().nutrition(10).saturationModifier(0.7f).build()
-                    : item.getDefaultInstance().get(DataComponents.FOOD);
+                    ? GameVersion.makeFood(10, 0.7f)
+                    : properties;
 
             if (isDrink) {
                 if (registry.contains("potion")) {
-                    food = new FoodProperties.Builder().nutrition(4).saturationModifier(0.75f).build();
+                    food = GameVersion.makeFood(4, 0.75f);
                 }
                 else if (registry.contains("milk")) {
-                    food = new FoodProperties.Builder().nutrition(6).saturationModifier(1f).build();
+                    food = GameVersion.makeFood(6, 1f);
                 }
                 else {
-                    food = new FoodProperties.Builder().nutrition(2).saturationModifier(0.5f).build();
+                    food = GameVersion.makeFood(2, 0.5f);
                 }
             }
 
             existing = new Common.FoodConfig();
-            existing.nutrition = food.nutrition();
+            existing.nutrition = GameVersion.nutrition(food);
             existing.healthRegenModifier = 1f;
-            existing.saturationModifier = (food.nutrition() == 0 ? 0f : food.saturation() / (food.nutrition() * 2f));
+            existing.saturationModifier = (GameVersion.nutrition(food) == 0 ? 0f : GameVersion.saturation(food) / (GameVersion.nutrition(food) * 2f));
 
             if (registry.startsWith("farmers"))
             {
@@ -73,11 +75,40 @@ public class ModConfig extends PartitioningSerializer.GlobalData {
         return existing;
     }
 
+    public static Common.FoodConfig getFoodConfig(ItemStack stack, LivingEntity entity) {
+        if (stack.isEmpty()) return null;
+        var actual = vice.sol_valheim.platform.Platform.foodProperties(stack, entity);
+        boolean drink = stack.getUseAnimation() == UseAnim.DRINK;
+        if (actual == null && !drink && !stack.is(Items.CAKE)) return null;
+        var base = getFoodConfig(stack.getItem());
+        // Some items become edible only after receiving data components.
+        if (base == null) base = new Common.FoodConfig();
+        if (actual == null || !base.useStackFoodValues) return base;
+        var defaults = vice.sol_valheim.platform.Platform.foodProperties(stack.getItem().getDefaultInstance(), entity);
+        if (defaults != null && GameVersion.nutrition(actual) == GameVersion.nutrition(defaults)
+                && Float.compare(GameVersion.saturation(actual), GameVersion.saturation(defaults)) == 0) return base;
+
+        var evaluated = base.copy();
+        float actualModifier = GameVersion.nutrition(actual) == 0 ? 0f : GameVersion.saturation(actual) / (GameVersion.nutrition(actual) * 2f);
+        float defaultModifier = defaults == null || GameVersion.nutrition(defaults) == 0
+                ? 0f : GameVersion.saturation(defaults) / (GameVersion.nutrition(defaults) * 2f);
+        // Preserve configured scaling while applying the actual stack's food values.
+        evaluated.nutrition = Mth.clamp(defaults != null && GameVersion.nutrition(defaults) > 0
+                ? Math.round(GameVersion.nutrition(actual) * ((float) base.nutrition / GameVersion.nutrition(defaults)))
+                : GameVersion.nutrition(actual), 0, 1000);
+        evaluated.saturationModifier = finite(defaultModifier > 0
+                ? actualModifier * base.saturationModifier / defaultModifier : actualModifier, 1f, 0f, 100f);
+        return evaluated;
+    }
+
     public void validate() {
         if (common == null) common = new Common();
         if (client == null) client = new Client();
+        client.hudPositionX = finite(client.hudPositionX, 0.5f, 0f, 1f);
+        client.hudPositionY = finite(client.hudPositionY, 1f, 0f, 1f);
         common.maxSlots = Mth.clamp(common.maxSlots, 2, 5);
-        common.startingHealth = Mth.clamp(common.startingHealth, 1, 20);
+        common.maxHealth = Mth.clamp(common.maxHealth, 1, 1000);
+        common.startingHealth = Mth.clamp(common.startingHealth, 1, Math.min(20, common.maxHealth));
         common.defaultTimer = Mth.clamp(common.defaultTimer, 1, 86400);
         common.regenDelay = Math.max(0, common.regenDelay);
         common.respawnGracePeriod = Math.max(0, common.respawnGracePeriod);
@@ -130,6 +161,9 @@ public class ModConfig extends PartitioningSerializer.GlobalData {
         public int startingHealth = 3;
 
         @ConfigEntry.Gui.Tooltip()
+        public int maxHealth = 30;
+
+        @ConfigEntry.Gui.Tooltip()
         public int maxSlots = 3;
 
         @ConfigEntry.Gui.Tooltip()
@@ -149,7 +183,18 @@ public class ModConfig extends PartitioningSerializer.GlobalData {
             public int nutrition;
             public float saturationModifier = 1f;
             public float healthRegenModifier = 1f;
+            public boolean useStackFoodValues = true;
             public List<MobEffectConfig> extraEffects = new ArrayList<>();
+
+            public FoodConfig copy() {
+                var copy = new FoodConfig();
+                copy.nutrition = nutrition;
+                copy.saturationModifier = saturationModifier;
+                copy.healthRegenModifier = healthRegenModifier;
+                copy.useStackFoodValues = useStackFoodValues;
+                copy.extraEffects = new ArrayList<>(extraEffects);
+                return copy;
+            }
 
             public int getTime() {
                 var time = (int) Math.min(Integer.MAX_VALUE, SOLValheim.Config.common.defaultTimer * 20.0 * saturationModifier * nutrition);
@@ -178,7 +223,7 @@ public class ModConfig extends PartitioningSerializer.GlobalData {
 
             public Holder<MobEffect> getEffect() {
                 var id = ID == null ? null : ResourceLocation.tryParse(ID);
-                return id == null ? null : BuiltInRegistries.MOB_EFFECT.getHolder(id).orElse(null);
+                return id == null ? null : BuiltInRegistries.MOB_EFFECT.getHolder(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.MOB_EFFECT, id)).orElse(null);
             }
         }
 
@@ -189,5 +234,17 @@ public class ModConfig extends PartitioningSerializer.GlobalData {
         @ConfigEntry.Gui.Tooltip
 
         public boolean useLargeIcons = true;
+
+        @ConfigEntry.Gui.Tooltip
+        public boolean useProgressBar = true;
+
+        @ConfigEntry.Gui.Tooltip
+        public boolean customHudPosition = false;
+
+        @ConfigEntry.Gui.Excluded
+        public float hudPositionX = 0.5f;
+
+        @ConfigEntry.Gui.Excluded
+        public float hudPositionY = 1f;
     }
 }

@@ -1,145 +1,45 @@
-
 plugins {
-    id "com.github.johnrengelman.shadow" version "$shadow_version"
-    id "me.modmuss50.mod-publish-plugin"
+    id 'java-library'
+    id 'net.neoforged.moddev.legacyforge'
 }
-
-architectury {
-    platformSetupLoomIde()
-    forge()
+version = rootProject.mod_version
+group = rootProject.group
+base { archivesName = 'sol_valheim-forge-1.20.1' }
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(17)
+    withSourcesJar()
 }
-
-def generatedResources = file("src/generated")
-
-configurations {
-    common
-    shadowCommon // Don't use shadow from the shadow plugin because we don't want IDEA to index this.
-    compileClasspath.extendsFrom common
-    runtimeClasspath.extendsFrom common
-    developmentForge.extendsFrom common
+repositories { maven { url = 'https://maven.shedaniel.me/' } }
+sourceSets.main {
+    java.srcDirs = [rootProject.file('common/src/main/java'), rootProject.file('common/src/versions/1.20.1/java'), 'src/main/java']
+    resources.srcDirs = [rootProject.file('common/src/main/resources'), 'src/main/resources']
+    resources.exclude '*.aw', '*.accesswidener'
 }
-
-repositories {
-    // mavens for Forge-exclusives
-    maven { url = "https://maven.theillusivec4.top/" } // Curios
-    maven { // Create Forge and Registrate Forge
-        url = "https://maven.tterrag.com/"
-        content {
-            includeGroup("com.tterrag.registrate")
-            includeGroup("com.simibubi.create")
-        }
-    }
-}
-
-loom {
-    forge {
-        //convertAccessWideners = true
-        //extraAccessWideners.add loom.accessWidenerPath.get().asFile.name
-        mixinConfig("${archives_base_name}-common.mixins.json", "${archives_base_name}.mixins.json")
-    }
-
+legacyForge {
+    version = "1.20.1-${rootProject.forge_version}"
     runs {
-        data {
-            data()
-            name "Forge Datagen"
-
-            programArgs "--all", "--mod", "logic_n_control"
-            vmArg '-Dforge.logging.markers=REGISTRIES'
-            vmArg '-Dforge.logging.console.level=debug'
-            programArgs "--output", "${project.rootProject.file("forge/src/generated/resources")}"
-            programArgs "--existing", "${project.rootProject.file("common/src/main/resources")}"
-            programArgs "--existing-mod", "create"
-            programArgs "--flat"
-        }
+        client { client() }
+        server { server(); programArgument '--nogui' }
     }
+    mods { sol_valheim { sourceSet sourceSets.main } }
 }
-
 dependencies {
-    forge "net.minecraftforge:forge:${rootProject.minecraft_version}-${rootProject.forge}"
-    common(project(path: ":common", configuration: "namedElements")) { transitive false }
-    shadowCommon(project(path: ":common", configuration: "transformProductionForge")) { transitive = false }
-
-    modApi "dev.architectury:architectury-forge:${rootProject.architectury_version}"
+    modImplementation "me.shedaniel.cloth:cloth-config-forge:${rootProject.cloth_config_1201}"
+    annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
 }
-
-shadowJar {
-    exclude "fabric.mod.json"
-    exclude "architectury.common.json"
-
-    configurations = [project.configurations.shadowCommon, project.configurations.shade]
-
-    archiveClassifier.set "dev-shadow"
+mixin {
+    add sourceSets.main, 'sol_valheim.refmap.json'
+    config 'sol_valheim-common.mixins.json'
 }
-
-remapJar {
-    input.set shadowJar.archiveFile
-    dependsOn shadowJar
-    archiveClassifier.set null
+jar { manifest.attributes 'MixinConfigs': 'sol_valheim-common.mixins.json' }
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.release = 17
 }
-
-jar {
-    archiveClassifier.set "dev"
-}
-
-sourcesJar {
-    def commonSources = project(":common").sourcesJar
-    dependsOn commonSources
-    from commonSources.archiveFile.map { zipTree(it) }
-}
-
-components.java {
-    withVariantsFromConfiguration(project.configurations.shadowRuntimeElements) {
-        skip()
-    }
-}
-
-publishMods {
-    file = remapJar.archiveFile
-    version = "$mod_version-forge-mc$rootProject.minecraft_version"
-    type = STABLE
-    displayName = "$display_name $mod_version Forge $rootProject.minecraft_version"
-    modLoaders.add("forge")
-    changelog = "View changelog at https://github.com/anthxnymc/$modid"
-
-    curseforge {
-        projectId = curseforge_id
-        accessToken = System.getenv("CURSEFORGE_TOKEN")
-        minecraftVersions.add(rootProject.minecraft_version)
-
-        requires {
-            slug = "cloth-config"
-        }
-
-        requires {
-            slug = "architectury-api"
-        }
-    }
-
-    modrinth {
-        projectId = modrinth_id
-        accessToken = System.getenv("MODRINTH_TOKEN")
-        minecraftVersions.add(rootProject.minecraft_version)
-
-        requires {
-            slug = "cloth-config"
-        }
-
-        requires {
-            slug = "architectury-api"
-        }
-    }
-}
-
-publishing {
-    publications {
-        mavenForge(MavenPublication) {
-            artifactId = rootProject.modid + "-" + project.name
-            from components.java
-        }
-    }
-
-    // See https://docs.gradle.org/current/userguide/publishing_maven.html for information on how to set up publishing.
-    repositories {
-        // Add repositories to publish to here.
+processResources {
+    inputs.property 'mod_version', project.version
+    filesMatching('META-INF/mods.toml') { expand mod_version: project.version }
+    filesMatching('sol_valheim-common.mixins.json') {
+        filter { line -> line.replace('JAVA_21', 'JAVA_17').replace('"minVersion": "0.8",', '"minVersion": "0.8", "refmap": "sol_valheim.refmap.json",') }
     }
 }
