@@ -10,6 +10,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.UseAnim;
+import vice.sol_valheim.accessors.LunchContainerAccessor;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -21,6 +22,7 @@ public class ValheimFoodData
     public EatenFoodItem DrinkSlot;
     public int MaxItemSlots = SOLValheim.Config.common.maxSlots;
     private int nourishmentProgress;
+    private double pendingHungerTicks;
 
     public boolean eatItem(Item food)
     {
@@ -33,8 +35,16 @@ public class ValheimFoodData
             return false;
 
         var config = ModConfig.getFoodConfig(stack, entity);
-        if (config == null)
+        return eatConfiguredItem(stack, config);
+    }
+
+    public boolean eatConfiguredItem(ItemStack stack, ModConfig.Common.FoodConfig config)
+    {
+        if (stack.isEmpty() || stack.is(Items.ROTTEN_FLESH) || config == null)
             return false;
+
+        // Settle costs against the foods that existed when the cost was requested.
+        applyHungerCosts();
 
         var isDrink = stack.getUseAnimation() == UseAnim.DRINK;
         if (isDrink) {
@@ -138,7 +148,8 @@ public class ValheimFoodData
     private EatenFoodItem getEatenFood(ItemStack stack, ModConfig.Common.FoodConfig config) {
         boolean dynamic = config != ModConfig.getFoodConfig(stack.getItem());
         return ItemEntries.stream().filter(entry -> entry.item == stack.getItem()
-                && (!(dynamic || entry.dynamicConfig != null) || sameFoodComponents(entry.stack, stack)))
+                && (stack.getItem() instanceof LunchContainerAccessor
+                    || !(dynamic || entry.dynamicConfig != null) || sameFoodComponents(entry.stack, stack)))
                 .findFirst().orElse(null);
     }
 
@@ -152,9 +163,12 @@ public class ValheimFoodData
         ItemEntries.clear();
         DrinkSlot = null;
         nourishmentProgress = 0;
+        pendingHungerTicks = 0;
     }
 
     public void applyDeathPenalty() {
+        applyHungerCosts();
+        if (SOLValheim.Config.common.keepFoodOnDeath) return;
         nourishmentProgress = 0;
         ItemEntries.removeIf(item -> !retainAfterDeath(item));
         if (DrinkSlot != null && !retainAfterDeath(DrinkSlot)) DrinkSlot = null;
@@ -175,6 +189,7 @@ public class ValheimFoodData
 
     public void tick(boolean nourished)
     {
+        applyHungerCosts();
         if (!hasFood()) {
             nourishmentProgress = 0;
             return;
@@ -193,6 +208,47 @@ public class ValheimFoodData
 
         ItemEntries.removeIf(item -> item.ticksLeft <= 0);
         ItemEntries.sort(Comparator.comparingInt(a -> a.ticksLeft));
+    }
+
+    /** Accumulate actual costs, calculating the curve at most once per food tick. */
+    public void queueHungerCost(double seconds) {
+        if (!SOLValheim.Config.common.convertHungerCosts || !Double.isFinite(seconds) || seconds <= 0
+                || hungerSlotCount() == 0) return;
+        // Bound corrupt or extreme requests without overflowing the tick budget.
+        pendingHungerTicks = Math.min(1.0e12, pendingHungerTicks + seconds * 20.0);
+    }
+
+    public void discardHungerCosts() {
+        pendingHungerTicks = 0;
+    }
+
+    public void applyHungerCosts() {
+        if (pendingHungerTicks <= 0) return;
+        double budget = pendingHungerTicks;
+        pendingHungerTicks = 0;
+        int slots = hungerSlotCount();
+        if (!SOLValheim.Config.common.convertHungerCosts || slots == 0) return;
+        double perSlot = budget / slots;
+        for (var item : ItemEntries) consumeHungerTime(item, perSlot);
+        if (SOLValheim.Config.common.hungerConsumesDrinks && DrinkSlot != null)
+            consumeHungerTime(DrinkSlot, perSlot);
+        ItemEntries.removeIf(item -> item.ticksLeft <= 0);
+        if (DrinkSlot != null && DrinkSlot.ticksLeft <= 0) DrinkSlot = null;
+    }
+
+    private int hungerSlotCount() {
+        return ItemEntries.size() + (SOLValheim.Config.common.hungerConsumesDrinks && DrinkSlot != null ? 1 : 0);
+    }
+
+    private static void consumeHungerTime(EatenFoodItem item, double budget) {
+        var config = item.getConfig();
+        if (config == null || item.ticksLeft <= 0) return;
+        double fraction = Math.min(1.0, (double) item.ticksLeft / config.getTime());
+        double loss = budget * Math.pow(fraction, SOLValheim.Config.common.hungerConsumptionExponent)
+                + item.hungerRemainder;
+        int wholeTicks = (int) Math.min(item.ticksLeft, Math.floor(loss));
+        item.ticksLeft -= wholeTicks;
+        item.hungerRemainder = item.ticksLeft > 0 ? loss - wholeTicks : 0;
     }
 
     public float getTotalFoodNutrition()
@@ -252,10 +308,12 @@ public class ValheimFoodData
         tag.putInt("max_slots", MaxItemSlots);
         tag.putInt("count", ItemEntries.size());
         tag.putInt("nourishment_progress", nourishmentProgress);
+        tag.putDouble("pending_hunger_ticks", pendingHungerTicks);
         for (var item : ItemEntries)
         {
             tag.putString("id" + count, BuiltInRegistries.ITEM.getKey(item.item).toString());
             tag.putInt("ticks" + count, item.ticksLeft);
+            tag.putDouble("hunger_remainder" + count, item.hungerRemainder);
             tag.put("stack" + count, GameVersion.saveStack(item.stack, registries));
             if (item.dynamicConfig != null) tag.put("values" + count, saveValues(item.dynamicConfig));
             count++;
@@ -265,6 +323,7 @@ public class ValheimFoodData
         {
             tag.putString("drink", BuiltInRegistries.ITEM.getKey(DrinkSlot.item).toString());
             tag.putInt("drinkticks", DrinkSlot.ticksLeft);
+            tag.putDouble("drink_hunger_remainder", DrinkSlot.hungerRemainder);
             tag.put("drinkstack", GameVersion.saveStack(DrinkSlot.stack, registries));
             if (DrinkSlot.dynamicConfig != null) tag.put("drinkvalues", saveValues(DrinkSlot.dynamicConfig));
         }
@@ -277,6 +336,7 @@ public class ValheimFoodData
 
         if (tag == null) return instance;
         instance.nourishmentProgress = net.minecraft.util.Mth.clamp(tag.getInt("nourishment_progress"), 0, 19);
+        instance.pendingHungerTicks = finiteDouble(tag.getDouble("pending_hunger_ticks"), 1.0e12);
         int size = Math.min(Math.max(0, tag.getInt("count")), 5);
         for (int count = 0; count < size; count++) {
             var stack = readStack(tag, "stack" + count, "id" + count, registries);
@@ -284,12 +344,19 @@ public class ValheimFoodData
             int ticks = tag.getInt("ticks" + count);
             if (config != null && ticks > 0 && instance.getEatenFood(stack, config) == null
                     && instance.ItemEntries.size() < instance.MaxItemSlots)
-                instance.ItemEntries.add(new EatenFoodItem(stack, ticks, config));
+            {
+                var entry = new EatenFoodItem(stack, ticks, config);
+                entry.hungerRemainder = finiteDouble(tag.getDouble("hunger_remainder" + count), Math.nextDown(1.0));
+                instance.ItemEntries.add(entry);
+            }
         }
         var drink = readStack(tag, "drinkstack", "drink", registries);
         var config = readValues(tag, "drinkvalues", drink);
         int ticks = tag.getInt("drinkticks");
-        if (config != null && ticks > 0) instance.DrinkSlot = new EatenFoodItem(drink, ticks, config);
+        if (config != null && ticks > 0) {
+            instance.DrinkSlot = new EatenFoodItem(drink, ticks, config);
+            instance.DrinkSlot.hungerRemainder = finiteDouble(tag.getDouble("drink_hunger_remainder"), Math.nextDown(1.0));
+        }
         instance.setMaxSlots(SOLValheim.Config.common.maxSlots);
         return instance;
     }
@@ -326,6 +393,10 @@ public class ValheimFoodData
         return Float.isFinite(value) ? net.minecraft.util.Mth.clamp(value, min, max) : 1f;
     }
 
+    private static double finiteDouble(double value, double max) {
+        return Double.isFinite(value) ? Math.max(0, Math.min(value, max)) : 0;
+    }
+
     public boolean hasFood() {
         return !ItemEntries.isEmpty() || DrinkSlot != null;
     }
@@ -335,6 +406,7 @@ public class ValheimFoodData
     }
 
     public void passNight(long ticks, boolean nourished) {
+        applyHungerCosts();
         if (!hasFood()) {
             nourishmentProgress = 0;
             return;
@@ -359,6 +431,7 @@ public class ValheimFoodData
         public ItemStack stack;
         public int ticksLeft;
         private ModConfig.Common.FoodConfig dynamicConfig;
+        private double hungerRemainder;
 
         public ModConfig.Common.FoodConfig getConfig() {
             return dynamicConfig != null ? dynamicConfig : ModConfig.getFoodConfig(item);
@@ -386,6 +459,7 @@ public class ValheimFoodData
         }
 
         private void setFood(ItemStack stack, ModConfig.Common.FoodConfig config) {
+            this.hungerRemainder = 0;
             this.item = stack.getItem();
             this.stack = stack.copyWithCount(1);
             this.dynamicConfig = config == ModConfig.getFoodConfig(item) ? null : config.copy();
@@ -397,6 +471,7 @@ public class ValheimFoodData
             this.stack = eaten.stack.copy();
             this.dynamicConfig = eaten.dynamicConfig == null ? null : eaten.dynamicConfig.copy();
             this.ticksLeft = eaten.ticksLeft;
+            this.hungerRemainder = eaten.hungerRemainder;
         }
     }
 }

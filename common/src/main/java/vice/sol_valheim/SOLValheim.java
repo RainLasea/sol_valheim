@@ -12,6 +12,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.UseAnim;
 import vice.sol_valheim.accessors.PlayerEntityMixinDataAccessor;
+import vice.sol_valheim.accessors.LunchContainerAccessor;
 import java.util.List;
 import java.util.Locale;
 
@@ -46,12 +47,18 @@ public final class SOLValheim {
 
     public static void consume(Player player, ItemStack stack) {
         if (player.level().isClientSide || player.isCreative() || player.isSpectator()) return;
+        // Onion emits a nested finish event for the actual food. Ignore the outer
+        // container event, whose contents may already be empty or select another food.
+        if (stack.getItem() instanceof LunchContainerAccessor) return;
+        var container = player.getUseItem();
+        boolean fromContainer = container.getItem() instanceof LunchContainerAccessor;
+        var food = fromContainer ? ModConfig.getContainerFoodConfig(container, stack, player)
+                : ModConfig.getFoodConfig(stack, player);
         var accessor = (PlayerEntityMixinDataAccessor) player;
         var data = accessor.sol_valheim$getFoodData();
         if (stack.is(Items.ROTTEN_FLESH)) {
             data.clear();
-        } else if (data.eatItem(stack, player)) {
-            var food = ModConfig.getFoodConfig(stack, player);
+        } else if (data.eatConfiguredItem(fromContainer ? container : stack, food)) {
             for (var effect : food.extraEffects) {
                 var holder = effect.getEffect();
                 if (holder == null || !Float.isFinite(effect.duration) || effect.duration <= 0) continue;

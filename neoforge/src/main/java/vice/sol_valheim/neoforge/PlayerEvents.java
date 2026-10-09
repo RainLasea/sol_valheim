@@ -9,9 +9,12 @@ import net.neoforged.neoforge.event.entity.EntityJoinLevelEvent;
 import net.neoforged.neoforge.event.level.SleepFinishedTimeEvent;
 import net.neoforged.neoforge.event.tick.PlayerTickEvent;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
+import net.neoforged.neoforge.event.server.ServerStartingEvent;
 import vice.sol_valheim.PlayerLifecycle;
 import vice.sol_valheim.SOLValheim;
 public final class PlayerEvents {
+    // Item callbacks can depend on datapack registries, which do not exist during common setup.
+    @SubscribeEvent public void serverStarting(ServerStartingEvent e) { SOLValheim.generateFoodConfigs(); }
     @SubscribeEvent public void commands(RegisterCommandsEvent e) { PlayerLifecycle.commands(e.getDispatcher()); }
     @SubscribeEvent public void finishUsing(LivingEntityUseItemEvent.Finish e) { if (e.getEntity() instanceof Player p) SOLValheim.consume(p, e.getItem()); }
     @SubscribeEvent public void clonePlayer(PlayerEvent.Clone e) { PlayerLifecycle.clonePlayer(e.getOriginal(), e.getEntity(), e.isWasDeath()); }

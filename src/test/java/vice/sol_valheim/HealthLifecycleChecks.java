@@ -93,6 +93,30 @@ class HealthLifecycleChecks {
         assertEquals(6f, third.getHealth());
     }
 
+    @Test void deathCloneWithKeepFoodPreservesDrinksDynamicValuesAndTimers() throws Exception {
+        SOLValheim.Config.common.keepFoodOnDeath = true;
+        var original = player(false);
+        var food = ((PlayerEntityMixinDataAccessor) original).sol_valheim$getFoodData();
+        var rich = Items.BREAD.getDefaultInstance();
+        rich.set(net.minecraft.core.component.DataComponents.FOOD,
+                new net.minecraft.world.food.FoodProperties.Builder().nutrition(9).saturationModifier(0.9f).build());
+        assertTrue(food.eatItem(rich, original));
+        assertTrue(food.eatItem(Items.POTION));
+        food.ItemEntries.getFirst().ticksLeft = 100;
+        food.DrinkSlot.ticksLeft = 200;
+        original.setHealth(0);
+        var target = player(false);
+        new PlayerEvents().clonePlayer(new PlayerEvent.Clone(target, original, true));
+        var retained = ((PlayerEntityMixinDataAccessor) target).sol_valheim$getFoodData();
+        assertEquals(100, retained.ItemEntries.getFirst().ticksLeft);
+        assertEquals(200, retained.DrinkSlot.ticksLeft);
+        assertEquals(9, retained.ItemEntries.getFirst().getConfig().nutrition);
+        assertEquals(target.getMaxHealth(), target.getHealth());
+        retained.tick();
+        assertEquals(100, food.ItemEntries.getFirst().ticksLeft);
+        assertEquals(200, food.DrinkSlot.ticksLeft);
+    }
+
     @Test void foodHealthDefaultsToThreeRowsAndHonorsConfiguredCap() throws Exception {
         for (var item : new net.minecraft.world.item.Item[]{Items.BREAD, Items.APPLE, Items.CARROT})
             ModConfig.getFoodConfig(item).nutrition = 30;
@@ -126,7 +150,7 @@ class HealthLifecycleChecks {
         assertTrue(((PlayerEntityMixinDataAccessor) target).sol_valheim$getFoodData().hasFood());
         target.creative = true;
         PlayerEvents.updateAttributes(target);
-        assertEquals(40f, target.getMaxHealth());
+        assertEquals(31f, target.getMaxHealth());
         assertNotNull(target.getAttribute(Attributes.MAX_HEALTH).getModifier(otherBonus.id()));
     }
 

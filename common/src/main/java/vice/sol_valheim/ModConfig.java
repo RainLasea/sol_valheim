@@ -13,6 +13,8 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.UseAnim;
+import net.minecraft.world.entity.player.Player;
+import vice.sol_valheim.accessors.LunchContainerAccessor;
 
 import java.util.ArrayList;
 import java.util.Map;
@@ -77,6 +79,8 @@ public class ModConfig extends PartitioningSerializer.GlobalData {
 
     public static Common.FoodConfig getFoodConfig(ItemStack stack, LivingEntity entity) {
         if (stack.isEmpty()) return null;
+        if (stack.getItem() instanceof LunchContainerAccessor container && entity instanceof Player player)
+            return getContainerFoodConfig(stack, container.sol_valheim$getActualFood(player, stack), entity);
         var actual = vice.sol_valheim.platform.Platform.foodProperties(stack, entity);
         boolean drink = stack.getUseAnimation() == UseAnim.DRINK;
         if (actual == null && !drink && !stack.is(Items.CAKE)) return null;
@@ -101,6 +105,20 @@ public class ModConfig extends PartitioningSerializer.GlobalData {
         return evaluated;
     }
 
+    public static Common.FoodConfig getContainerFoodConfig(ItemStack container, ItemStack consumed, LivingEntity entity) {
+        if (consumed.isEmpty()) return null;
+        var selected = getFoodConfig(consumed, entity);
+        if (selected == null) return null;
+        var base = getFoodConfig(container.getItem());
+        if (base == null) return null;
+        if (!base.useStackFoodValues) return base;
+        // Store a snapshot of the eaten food's values, with the container as slot identity.
+        var evaluated = selected.copy();
+        evaluated.healthRegenModifier = finite(selected.healthRegenModifier * base.healthRegenModifier, 1f, 0f, 100f);
+        evaluated.extraEffects.addAll(base.extraEffects);
+        return evaluated;
+    }
+
     public void validate() {
         if (common == null) common = new Common();
         if (client == null) client = new Client();
@@ -116,6 +134,9 @@ public class ModConfig extends PartitioningSerializer.GlobalData {
         common.speedBoost = finite(common.speedBoost, 0.2f, 0f, 10f);
         common.eatAgainPercentage = finite(common.eatAgainPercentage, 0.2f, 0f, 1f);
         common.drinkSlotFoodEffectivenessBonus = finite(common.drinkSlotFoodEffectivenessBonus, 0.1f, 0f, 10f);
+        common.hungerSecondsPerPoint = finite(common.hungerSecondsPerPoint, 60f, 0f, 86400f);
+        common.exhaustionSecondsPerPoint = finite(common.exhaustionSecondsPerPoint, 10f, 0f, 86400f);
+        common.hungerConsumptionExponent = finite(common.hungerConsumptionExponent, 0.5f, 0f, 2f);
         if (common.foodConfigs == null) common.foodConfigs = new LinkedHashMap<>();
         common.foodConfigs.values().removeIf(java.util.Objects::isNull);
         for (var food : common.foodConfigs.values()) {
@@ -155,6 +176,9 @@ public class ModConfig extends PartitioningSerializer.GlobalData {
         public int respawnGracePeriod = 60 * 5;
 
         @ConfigEntry.Gui.Tooltip()
+        public boolean keepFoodOnDeath = false;
+
+        @ConfigEntry.Gui.Tooltip()
         public float speedBoost = 0.20f;
 
         @ConfigEntry.Gui.Tooltip()
@@ -174,6 +198,21 @@ public class ModConfig extends PartitioningSerializer.GlobalData {
 
         @ConfigEntry.Gui.Tooltip()
         public boolean passTicksDuringNight = true;
+
+        @ConfigEntry.Gui.Tooltip()
+        public boolean convertHungerCosts = true;
+
+        @ConfigEntry.Gui.Tooltip()
+        public float hungerSecondsPerPoint = 60f;
+
+        @ConfigEntry.Gui.Tooltip()
+        public float exhaustionSecondsPerPoint = 10f;
+
+        @ConfigEntry.Gui.Tooltip()
+        public float hungerConsumptionExponent = 0.5f;
+
+        @ConfigEntry.Gui.Tooltip()
+        public boolean hungerConsumesDrinks = true;
 
         @ConfigEntry.Gui.Tooltip(count = 5)
         @ConfigEntry.Gui.Excluded

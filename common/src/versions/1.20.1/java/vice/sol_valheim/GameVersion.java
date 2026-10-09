@@ -38,9 +38,14 @@ public final class GameVersion {
     public static MobEffectInstance effectInstance(Holder<MobEffect> effect, int ticks, int amplifier) { return new MobEffectInstance(effect.value(), ticks, amplifier); }
     public static boolean hasEffect(Player player, Holder<MobEffect> effect) { return player.hasEffect(effect.value()); }
     private static void replace(AttributeInstance attribute, AttributeModifier modifier) {
+        replace(attribute, modifier, false);
+    }
+    private static void replace(AttributeInstance attribute, AttributeModifier modifier, boolean permanent) {
         var old = attribute.getModifier(modifier.getId());
         if (old != null && old.getAmount() == modifier.getAmount() && old.getOperation() == modifier.getOperation()) return;
-        attribute.removeModifier(modifier.getId()); attribute.addTransientModifier(modifier);
+        attribute.removeModifier(modifier.getId());
+        if (permanent) attribute.addPermanentModifier(modifier);
+        else attribute.addTransientModifier(modifier);
     }
     // Called from Player's constructor before the client's connection and game mode exist.
     public static void initializeClientHealth(Player player) {
@@ -51,13 +56,14 @@ public final class GameVersion {
     public static void updateAttributes(Player player) {
         var health = player.getAttribute(Attributes.MAX_HEALTH);
         var speed = player.getAttribute(Attributes.MOVEMENT_SPEED);
-        if (player.isCreative() || player.isSpectator()) {
-            health.removeModifier(HEALTH_ID); speed.removeModifier(SPEED_ID); return;
-        }
         var food = ((vice.sol_valheim.accessors.PlayerEntityMixinDataAccessor) player).sol_valheim$getFoodData();
         double target = Math.min(SOLValheim.Config.common.maxHealth * 2, SOLValheim.Config.common.startingHealth * 2 + food.getTotalFoodNutrition());
-        replace(health, new AttributeModifier(HEALTH_ID, "sol_valheim.food_health", target - 20, AttributeModifier.Operation.ADDITION));
+        replace(health, new AttributeModifier(HEALTH_ID, "sol_valheim.food_health", target - 20, AttributeModifier.Operation.ADDITION),
+                !player.level().isClientSide);
         if (player.getHealth() > player.getMaxHealth()) player.setHealth(player.getMaxHealth());
+        if (player.isCreative() || player.isSpectator()) {
+            speed.removeModifier(SPEED_ID); return;
+        }
         if (target >= 20 && SOLValheim.Config.common.speedBoost > 0)
             replace(speed, new AttributeModifier(SPEED_ID, "sol_valheim.food_speed", SOLValheim.Config.common.speedBoost, AttributeModifier.Operation.MULTIPLY_BASE));
         else speed.removeModifier(SPEED_ID);

@@ -1,0 +1,11 @@
+// Optional runtime test with actual NeoForge Onion and CreativeCore release jars.
+// gradlew.bat :test --tests vice.sol_valheim.OnionRuntimeChecks -I gradle/onion-compat-test.gradle
+// Put the two NeoForge 1.21.1 jars in build/onion-compat-check, or pass -PonionTestMods=<directory>.
+gradle.projectsEvaluated {
+    def root = gradle.rootProject
+    def directory = root.findProperty('onionTestMods') ?: 'build/onion-compat-check'
+    def mods = root.fileTree(directory) { include '*NEOFORGE*.jar' }
+    if (mods.files.size() != 2) throw new GradleException('Supply the Onion and CreativeCore NeoForge 1.21.1 jars for this runtime test')
+    root.dependencies.add('testRuntimeOnly', root.files(mods))
+    root.sourceSets.test.java.srcDir(root.file('src/integrationTest/java'))
+}

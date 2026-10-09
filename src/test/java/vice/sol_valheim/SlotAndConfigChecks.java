@@ -96,6 +96,48 @@ class SlotAndConfigChecks {
         }
     }
 
+    @Test void reEatingSupportsHalfDurationAndStillHonorsStrictThresholds() {
+        SOLValheim.Config.common.eatAgainPercentage = 0.5f;
+        for (var item : new net.minecraft.world.item.Item[]{Items.BREAD, Items.POTION}) {
+            var data = new ValheimFoodData();
+            assertTrue(data.eatItem(item));
+            var entry = item == Items.POTION ? data.DrinkSlot : data.ItemEntries.getFirst();
+            int duration = entry.getConfig().getTime();
+            entry.ticksLeft = duration / 2;
+            assertFalse(data.canEat(item));
+            assertFalse(data.eatItem(item));
+            entry.ticksLeft--;
+            assertTrue(data.canEat(item));
+            assertTrue(data.eatItem(item));
+            assertEquals(duration, entry.ticksLeft);
+            assertEquals(1, data.ItemEntries.size() + (data.DrinkSlot == null ? 0 : 1));
+
+            SOLValheim.Config.common.eatAgainPercentage = 0.2f;
+            entry.ticksLeft = duration / 2 - 1;
+            assertFalse(data.canEat(item));
+            entry.ticksLeft = 1199;
+            assertTrue(data.canEat(item));
+            SOLValheim.Config.common.eatAgainPercentage = 0.5f;
+        }
+    }
+
+    @Test void keepFoodOnDeathRetainsLowTimersAndNourishmentProgress() {
+        SOLValheim.Config.common.keepFoodOnDeath = true;
+        var registries = RegistryAccess.fromRegistryOfRegistries(BuiltInRegistries.REGISTRY);
+        var data = new ValheimFoodData();
+        assertTrue(data.eatItem(Items.BREAD));
+        assertTrue(data.eatItem(Items.POTION));
+        data.ItemEntries.getFirst().ticksLeft = 101;
+        data.DrinkSlot.ticksLeft = 201;
+        data.tick(true); // Accumulate a partial nourishment tick.
+        var before = data.save(new CompoundTag(), registries);
+        data.applyDeathPenalty();
+        assertEquals(before, data.save(new CompoundTag(), registries));
+        SOLValheim.Config.common.keepFoodOnDeath = false;
+        data.applyDeathPenalty();
+        assertFalse(data.hasFood());
+    }
+
     @Test void commonSettingsAndFoodOverridesLoadWithoutCommentsOrFixedOrder() throws Exception {
         var path = directory.resolve("common.json5");
         var serializer = new ReadableConfigSerializer<>(path, ModConfig.Common.class);
@@ -109,7 +151,7 @@ class SlotAndConfigChecks {
                   },
                   maxSlots: 4, startingHealth: 5, maxHealth: 35, defaultTimer: 240,
                   regenSpeedModifier: 0.5, regenDelay: 60, respawnGracePeriod: 120,
-                  speedBoost: 0.3, eatAgainPercentage: 0.25,
+                  speedBoost: 0.3, eatAgainPercentage: 0.25, keepFoodOnDeath: true,
                   drinkSlotFoodEffectivenessBonus: 0.15, passTicksDuringNight: false,
                 }
                 """;
@@ -124,6 +166,7 @@ class SlotAndConfigChecks {
         assertEquals(120, common.respawnGracePeriod);
         assertEquals(0.3f, common.speedBoost);
         assertEquals(0.25f, common.eatAgainPercentage);
+        assertTrue(common.keepFoodOnDeath);
         assertEquals(0.15f, common.drinkSlotFoodEffectivenessBonus);
         assertFalse(common.passTicksDuringNight);
         SOLValheim.Config.common = common;
@@ -150,6 +193,7 @@ class SlotAndConfigChecks {
         assertEquals(30, partial.maxHealth);
         assertEquals(180, partial.defaultTimer);
         assertEquals(1f, partial.regenSpeedModifier);
+        assertFalse(partial.keepFoodOnDeath);
         Files.writeString(path, "{ startingHealth: ");
         assertThrows(me.shedaniel.autoconfig.serializer.ConfigSerializer.SerializationException.class, serializer::deserialize);
     }
