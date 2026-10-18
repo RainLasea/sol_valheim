@@ -28,6 +28,7 @@ import java.util.List;
 public class ModConfig extends PartitioningSerializer.GlobalData {
 
     public static Common.FoodConfig getFoodConfig(Item item) {
+        if (FoodExclusions.isExcluded(item) || SupplementariesCompat.isLunchBasket(item)) return null;
         var isDrink = item.getDefaultInstance().getUseAnimation() == UseAnim.DRINK;
         var properties = vice.sol_valheim.platform.Platform.foodProperties(item.getDefaultInstance(), null);
         if(item != Items.CAKE && properties == null && !isDrink)
@@ -78,7 +79,7 @@ public class ModConfig extends PartitioningSerializer.GlobalData {
     }
 
     public static Common.FoodConfig getFoodConfig(ItemStack stack, LivingEntity entity) {
-        if (stack.isEmpty()) return null;
+        if (stack.isEmpty() || FoodExclusions.isExcluded(stack) || SupplementariesCompat.isLunchBasket(stack.getItem())) return null;
         if (stack.getItem() instanceof LunchContainerAccessor container && entity instanceof Player player)
             return getContainerFoodConfig(stack, container.sol_valheim$getActualFood(player, stack), entity);
         var actual = vice.sol_valheim.platform.Platform.foodProperties(stack, entity);
@@ -106,14 +107,19 @@ public class ModConfig extends PartitioningSerializer.GlobalData {
     }
 
     public static Common.FoodConfig getContainerFoodConfig(ItemStack container, ItemStack consumed, LivingEntity entity) {
-        if (consumed.isEmpty()) return null;
+        if (container.isEmpty() || consumed.isEmpty() || FoodExclusions.isExcluded(container)) return null;
         var selected = getFoodConfig(consumed, entity);
         if (selected == null) return null;
         var base = getFoodConfig(container.getItem());
         if (base == null) return null;
-        if (!base.useStackFoodValues) return base;
+        if (!base.useStackFoodValues) {
+            var evaluated = base.copy();
+            evaluated.consumedItem = consumed.getItem();
+            return evaluated;
+        }
         // Store a snapshot of the eaten food's values, with the container as slot identity.
         var evaluated = selected.copy();
+        evaluated.consumedItem = consumed.getItem();
         evaluated.healthRegenModifier = finite(selected.healthRegenModifier * base.healthRegenModifier, 1f, 0f, 100f);
         evaluated.extraEffects.addAll(base.extraEffects);
         return evaluated;
@@ -137,6 +143,8 @@ public class ModConfig extends PartitioningSerializer.GlobalData {
         common.hungerSecondsPerPoint = finite(common.hungerSecondsPerPoint, 60f, 0f, 86400f);
         common.exhaustionSecondsPerPoint = finite(common.exhaustionSecondsPerPoint, 10f, 0f, 86400f);
         common.hungerConsumptionExponent = finite(common.hungerConsumptionExponent, 0.5f, 0f, 2f);
+        if (common.foodBlacklist == null) common.foodBlacklist = new ArrayList<>();
+        FoodExclusions.validate(common);
         if (common.foodConfigs == null) common.foodConfigs = new LinkedHashMap<>();
         common.foodConfigs.values().removeIf(java.util.Objects::isNull);
         for (var food : common.foodConfigs.values()) {
@@ -214,6 +222,12 @@ public class ModConfig extends PartitioningSerializer.GlobalData {
         @ConfigEntry.Gui.Tooltip()
         public boolean hungerConsumesDrinks = true;
 
+        @ConfigEntry.Gui.Tooltip()
+        public List<String> foodBlacklist = new ArrayList<>();
+
+        @ConfigEntry.Gui.Excluded
+        transient FoodExclusions.Rules exclusionRules;
+
         @ConfigEntry.Gui.Tooltip(count = 5)
         @ConfigEntry.Gui.Excluded
         public Map<String, FoodConfig> foodConfigs = new LinkedHashMap<>();
@@ -225,6 +239,10 @@ public class ModConfig extends PartitioningSerializer.GlobalData {
             public boolean useStackFoodValues = true;
             public List<MobEffectConfig> extraEffects = new ArrayList<>();
 
+            // Container slots retain the consumed ingredient's identity across reloads.
+            @ConfigEntry.Gui.Excluded
+            transient Item consumedItem;
+
             public FoodConfig copy() {
                 var copy = new FoodConfig();
                 copy.nutrition = nutrition;
@@ -232,6 +250,7 @@ public class ModConfig extends PartitioningSerializer.GlobalData {
                 copy.healthRegenModifier = healthRegenModifier;
                 copy.useStackFoodValues = useStackFoodValues;
                 copy.extraEffects = new ArrayList<>(extraEffects);
+                copy.consumedItem = consumedItem;
                 return copy;
             }
 

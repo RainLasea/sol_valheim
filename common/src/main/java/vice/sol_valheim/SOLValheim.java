@@ -40,18 +40,21 @@ public final class SOLValheim {
     }
 
     public static void generateFoodConfigs() {
-
+        FoodExclusions.warnUnknownItems();
         BuiltInRegistries.ITEM.forEach(ModConfig::getFoodConfig);
         AutoConfig.getConfigHolder(ModConfig.class).save();
     }
 
     public static void consume(Player player, ItemStack stack) {
         if (player.level().isClientSide || player.isCreative() || player.isSpectator()) return;
+        if (FoodExclusions.isExcluded(stack)) return;
         // Onion emits a nested finish event for the actual food. Ignore the outer
         // container event, whose contents may already be empty or select another food.
-        if (stack.getItem() instanceof LunchContainerAccessor) return;
+        if (stack.getItem() instanceof LunchContainerAccessor
+                || SupplementariesCompat.isLunchBasket(stack.getItem())) return;
         var container = player.getUseItem();
         boolean fromContainer = container.getItem() instanceof LunchContainerAccessor;
+        if (fromContainer && FoodExclusions.isExcluded(container)) return;
         var food = fromContainer ? ModConfig.getContainerFoodConfig(container, stack, player)
                 : ModConfig.getFoodConfig(stack, player);
         var accessor = (PlayerEntityMixinDataAccessor) player;
@@ -74,6 +77,7 @@ public final class SOLValheim {
     }
 
     public static void addTooltip(ItemStack stack, List<Component> tooltip, Player player) {
+        if (FoodExclusions.isExcluded(stack)) return;
         if (stack.is(Items.ROTTEN_FLESH)) {
             tooltip.add(Component.translatable("tooltip.sol_valheim.rotten_flesh").withStyle(ChatFormatting.GREEN));
             return;

@@ -40,9 +40,13 @@ public class ValheimFoodData
 
     public boolean eatConfiguredItem(ItemStack stack, ModConfig.Common.FoodConfig config)
     {
-        if (stack.isEmpty() || stack.is(Items.ROTTEN_FLESH) || config == null)
+        if (stack.isEmpty() || stack.is(Items.ROTTEN_FLESH) || config == null
+                || FoodExclusions.isExcluded(stack)
+                || config.consumedItem != null && FoodExclusions.isExcluded(config.consumedItem)
+                || SupplementariesCompat.isLunchBasket(stack.getItem()))
             return false;
 
+        removeExcludedFoods();
         // Settle costs against the foods that existed when the cost was requested.
         applyHungerCosts();
 
@@ -108,6 +112,8 @@ public class ValheimFoodData
 
     public boolean canEat(ItemStack stack, LivingEntity entity)
     {
+        if (FoodExclusions.isExcluded(stack)) return false;
+        removeExcludedFoods();
         if (stack.is(Items.ROTTEN_FLESH))
             return true;
 
@@ -166,7 +172,22 @@ public class ValheimFoodData
         pendingHungerTicks = 0;
     }
 
+    /** Remove stale slots after config or tag changes, including saved value snapshots. */
+    public boolean removeExcludedFoods() {
+        boolean changed = ItemEntries.removeIf(item -> item.getConfig() == null);
+        if (DrinkSlot != null && DrinkSlot.getConfig() == null) {
+            DrinkSlot = null;
+            changed = true;
+        }
+        if (!hasFood()) {
+            nourishmentProgress = 0;
+            pendingHungerTicks = 0;
+        }
+        return changed;
+    }
+
     public void applyDeathPenalty() {
+        removeExcludedFoods();
         applyHungerCosts();
         if (SOLValheim.Config.common.keepFoodOnDeath) return;
         nourishmentProgress = 0;
@@ -189,6 +210,7 @@ public class ValheimFoodData
 
     public void tick(boolean nourished)
     {
+        removeExcludedFoods();
         applyHungerCosts();
         if (!hasFood()) {
             nourishmentProgress = 0;
@@ -269,9 +291,8 @@ public class ValheimFoodData
             if (food != null)
             {
                 nutrition += food.getHearts();
+                nutrition = nutrition * (1.0f + SOLValheim.Config.common.drinkSlotFoodEffectivenessBonus);
             }
-
-            nutrition = nutrition * (1.0f + SOLValheim.Config.common.drinkSlotFoodEffectivenessBonus);
         }
 
         return nutrition;
@@ -295,9 +316,8 @@ public class ValheimFoodData
             if (food != null)
             {
                 regen += food.getHealthRegen();
+                regen = regen * (1.0f + SOLValheim.Config.common.drinkSlotFoodEffectivenessBonus);
             }
-
-            regen = regen * (1.0f + SOLValheim.Config.common.drinkSlotFoodEffectivenessBonus);
         }
 
         return regen;
@@ -374,15 +394,24 @@ public class ValheimFoodData
         values.putInt("nutrition", config.nutrition);
         values.putFloat("saturation", config.saturationModifier);
         values.putFloat("regen", config.healthRegenModifier);
+        if (config.consumedItem != null)
+            values.putString("consumed_item", BuiltInRegistries.ITEM.getKey(config.consumedItem).toString());
         return values;
     }
 
     private static ModConfig.Common.FoodConfig readValues(CompoundTag tag, String key, ItemStack stack) {
-        if (stack.isEmpty()) return null;
+        // Discard basket entries recorded by older versions, including saved dynamic values.
+        if (stack.isEmpty() || FoodExclusions.isExcluded(stack) || SupplementariesCompat.isLunchBasket(stack.getItem())) return null;
         var config = ModConfig.getFoodConfig(stack, null);
         if (!tag.contains(key, Tag.TAG_COMPOUND)) return config;
         var values = tag.getCompound(key);
         var saved = config == null ? new ModConfig.Common.FoodConfig() : config.copy();
+        if (values.contains("consumed_item", Tag.TAG_STRING)) {
+            var id = ResourceLocation.tryParse(values.getString("consumed_item"));
+            if (id == null || !BuiltInRegistries.ITEM.containsKey(id)) return null;
+            saved.consumedItem = BuiltInRegistries.ITEM.get(id);
+            if (FoodExclusions.isExcluded(saved.consumedItem)) return null;
+        }
         saved.nutrition = net.minecraft.util.Mth.clamp(values.getInt("nutrition"), 0, 1000);
         saved.saturationModifier = finiteValue(values.getFloat("saturation"), 0, 100);
         saved.healthRegenModifier = finiteValue(values.getFloat("regen"), 0, 100);
@@ -406,6 +435,7 @@ public class ValheimFoodData
     }
 
     public void passNight(long ticks, boolean nourished) {
+        removeExcludedFoods();
         applyHungerCosts();
         if (!hasFood()) {
             nourishmentProgress = 0;
@@ -434,6 +464,9 @@ public class ValheimFoodData
         private double hungerRemainder;
 
         public ModConfig.Common.FoodConfig getConfig() {
+            if (FoodExclusions.isExcluded(item)) return null;
+            if (dynamicConfig != null && dynamicConfig.consumedItem != null
+                    && FoodExclusions.isExcluded(dynamicConfig.consumedItem)) return null;
             return dynamicConfig != null ? dynamicConfig : ModConfig.getFoodConfig(item);
         }
 

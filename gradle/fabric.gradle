@@ -24,7 +24,9 @@ sourceSets.main {
                     rootProject.file("common/src/versions/${targetMinecraft}/java"),
                     rootProject.file('fabric/src/main/java'),
                     rootProject.file("fabric/src/versions/${targetMinecraft}/java")]
-    resources.srcDirs = [rootProject.file('common/src/main/resources'), rootProject.file('fabric/src/main/resources')]
+    resources.srcDirs = [rootProject.file('common/src/main/resources'),
+                         rootProject.file("common/src/versions/${targetMinecraft}/resources"),
+                         rootProject.file('fabric/src/main/resources')]
     resources.exclude '*.aw', '*.accesswidener'
 }
 tasks.withType(JavaCompile).configureEach {

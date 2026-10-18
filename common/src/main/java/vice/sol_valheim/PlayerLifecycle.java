@@ -3,6 +3,7 @@ package vice.sol_valheim;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
@@ -21,19 +22,26 @@ public final class PlayerLifecycle {
         dispatcher.register(Commands.literal("sol_valheim")
                 .requires(source -> source.hasPermission(2))
                 .then(Commands.literal("reload").executes(context -> {
-                    var holder = AutoConfig.getConfigHolder(ModConfig.class);
-                    if (!holder.load()) {
+                    if (!reloadConfig(context.getSource().getServer())) {
                         context.getSource().sendFailure(Component.translatable("commands.sol_valheim.reload.failed"));
                         return 0;
                     }
-                    SOLValheim.Config = holder.getConfig();
-                    SOLValheim.Config.validate();
-                    SOLValheim.generateFoodConfigs();
-                    for (var player : context.getSource().getServer().getPlayerList().getPlayers()) syncAll(player);
                     context.getSource().sendSuccess(() -> Component.translatable("commands.sol_valheim.reload.success"), true);
                     return 1;
                 })));
     }
+
+    /** Invoked after vanilla has applied and synchronized a successful datapack reload. */
+    public static boolean reloadConfig(MinecraftServer server) {
+        var holder = AutoConfig.getConfigHolder(ModConfig.class);
+        if (!holder.load()) return false;
+        SOLValheim.Config = holder.getConfig();
+        SOLValheim.Config.validate();
+        SOLValheim.generateFoodConfigs();
+        for (var player : server.getPlayerList().getPlayers()) syncAll(player);
+        return true;
+    }
+
     public static void clonePlayer(Player original, Player player, boolean death) {
         var target = (PlayerEntityMixinDataAccessor) player;
         var food = ValheimFoodData.read(
@@ -49,6 +57,7 @@ public final class PlayerLifecycle {
         updateAttributes(player);
     }
     public static void syncAll(ServerPlayer player) {
+        ((PlayerEntityMixinDataAccessor) player).sol_valheim$getFoodData().removeExcludedFoods();
         if (!player.isCreative() && !player.isSpectator())
             ((PlayerEntityMixinDataAccessor) player).sol_valheim$getFoodData().setMaxSlots(SOLValheim.Config.common.maxSlots);
         vice.sol_valheim.platform.Platform.syncConfig(player);
@@ -59,6 +68,11 @@ public final class PlayerLifecycle {
         if (player.level().isClientSide) return;
         var accessor = (PlayerEntityMixinDataAccessor) player;
         var food = accessor.sol_valheim$getFoodData();
+        // Read live tag membership so /reload also invalidates slots in protected modes.
+        if (food.removeExcludedFoods()) {
+            updateAttributes(player);
+            accessor.sol_valheim$syncFoodData();
+        }
         // Freeze timers until cloning applies the death penalty once at respawn.
         if (player.isDeadOrDying()) return;
         if (!player.isCreative() && !player.isSpectator()) {

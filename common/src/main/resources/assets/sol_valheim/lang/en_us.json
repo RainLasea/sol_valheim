@@ -44,6 +44,8 @@
   "text.autoconfig.sol_valheim.option.common.hungerConsumptionExponent.@Tooltip": "Multiply each slot's time budget by (remaining/full duration) raised to this power. Default 0.5: less remaining time costs less. 0 gives a constant cost; range 0 to 2.",
   "text.autoconfig.sol_valheim.option.common.hungerConsumesDrinks": "Include drinks in hunger costs",
   "text.autoconfig.sol_valheim.option.common.hungerConsumesDrinks.@Tooltip": "Share hunger costs between foods and the drink slot. Disable to spend only food time; ordinary drink countdowns still apply.",
+  "text.autoconfig.sol_valheim.option.common.foodBlacklist": "Excluded foods and drinks",
+  "text.autoconfig.sol_valheim.option.common.foodBlacklist.@Tooltip": "Item IDs or #item_tag IDs excluded from SOL slots, bonuses and tooltips. The sol_valheim:excluded_foods tag is always excluded. Original item behavior is preserved. Apply with /reload.",
   "text.autoconfig.sol_valheim.option.common.foodConfigs": "Food overrides",
   "text.autoconfig.sol_valheim.option.common.foodConfigs.@Tooltip": "Edit the JSON5 configuration file to customize individual foods.",
   "text.autoconfig.sol_valheim.option.client.useLargeIcons": "Large food icons",

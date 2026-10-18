@@ -27,7 +27,9 @@ public abstract class OnionFoodContainerMixin implements LunchContainerAccessor 
     private void valheimUseContainer(Level level, Player player, InteractionHand hand,
                                     CallbackInfoReturnable<InteractionResultHolder<ItemStack>> cir) {
         var stack = player.getItemInHand(hand);
-        if (getActualFood(player, stack).isEmpty()) {
+        var actual = getActualFood(player, stack);
+        if (vice.sol_valheim.FoodExclusions.isExcluded(stack) || vice.sol_valheim.FoodExclusions.isExcluded(actual)) return;
+        if (actual.isEmpty()) {
             cir.setReturnValue(InteractionResultHolder.pass(stack));
         } else if (player.isCreative() || player.isSpectator()
                 || ((PlayerEntityMixinDataAccessor) player).sol_valheim$getFoodData().canEat(stack, player)) {

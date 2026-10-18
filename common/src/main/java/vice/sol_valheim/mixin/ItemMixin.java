@@ -18,6 +18,7 @@ public class ItemMixin {
     @Inject(method = "use", at = @At("HEAD"), cancellable = true)
     private void valheimCanEat(Level level, Player player, InteractionHand hand, CallbackInfoReturnable<InteractionResultHolder<ItemStack>> cir) {
         var stack = player.getItemInHand(hand);
+        if (vice.sol_valheim.FoodExclusions.isExcluded(stack)) return;
         var food = vice.sol_valheim.platform.Platform.foodProperties(stack, player);
 
         if (food == null || food.canAlwaysEat() || player.isCreative() || player.isSpectator()) return;

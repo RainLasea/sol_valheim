@@ -3,13 +3,87 @@ on:
   push:
   pull_request:
   workflow_dispatch:
+    inputs:
+      publish:
+        description: Upload all four jars to CurseForge after a successful build
+        type: boolean
+        default: false
+      release_type:
+        description: CurseForge release type (manual publishing only)
+        type: choice
+        default: release
+        options:
+          - release
+          - beta
+          - alpha
+      changelog:
+        description: Optional release notes (otherwise link to the source commit)
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+env:
+  # Spice of Life: Valheim Edition Refork
+  CURSEFORGE_PROJECT_ID: ${{ vars.CURSEFORGE_PROJECT_ID || '1727389' }}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   build:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
+    timeout-minutes: 30
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+      release_type: ${{ steps.release.outputs.release_type }}
     steps:
       - uses: actions/checkout@v4
+      - name: Read version and validate release tag
+        id: release
+        shell: python
+        env:
+          MANUAL_RELEASE_TYPE: ${{ inputs.release_type }}
+        run: |
+          import os
+          import re
+          from pathlib import Path
+
+          properties = Path('gradle.properties').read_text(encoding='utf-8')
+          match = re.search(r'^mod_version\s*=\s*([0-9][0-9A-Za-z.+_-]*)\s*$', properties, re.MULTILINE)
+          if not match:
+              raise SystemExit('Cannot read mod_version from gradle.properties')
+          version = match.group(1)
+          ref = os.environ['GITHUB_REF']
+          if ref.startswith('refs/tags/v') and ref != f'refs/tags/v{version}':
+              raise SystemExit(f'Release tag must be v{version}, matching gradle.properties')
+          release_type = 'release'
+          if 'alpha' in version.lower():
+              release_type = 'alpha'
+          elif 'beta' in version.lower() or re.search(r'(?:^|[.+_-])rc', version.lower()):
+              release_type = 'beta'
+          if os.environ['GITHUB_EVENT_NAME'] == 'workflow_dispatch':
+              release_type = os.environ['MANUAL_RELEASE_TYPE']
+          with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as output:
+              output.write(f'version={version}\nrelease_type={release_type}\n')
+      - name: Check CurseForge configuration
+        if: >-
+          (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) ||
+          (github.event_name == 'workflow_dispatch' && inputs.publish)
+        shell: bash
+        env:
+          CURSEFORGE_TOKEN: ${{ secrets.CURSEFORGE_TOKEN }}
+        run: |
+          if [[ -z "$CURSEFORGE_TOKEN" ]]; then
+            echo '::error::Add the CURSEFORGE_TOKEN repository secret before publishing.'
+            exit 1
+          fi
+          if [[ ! "$CURSEFORGE_PROJECT_ID" =~ ^[1-9][0-9]*$ ]]; then
+            echo '::error::Set the CURSEFORGE_PROJECT_ID repository variable to your numeric project ID.'
+            exit 1
+          fi
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -24,3 +98,64 @@ jobs:
           name: sol-valheim-multiloader
           path: build/distributions/*.jar
           if-no-files-found: error
+
+  publish:
+    name: Publish ${{ matrix.loader }} ${{ matrix.minecraft }}
+    needs: build
+    if: >-
+      (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) ||
+      (github.event_name == 'workflow_dispatch' && inputs.publish)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - loader: fabric
+            minecraft: '1.20.1'
+            java: '17'
+            dependencies: |
+              cloth-config(required)
+              fabric-api(required)
+              modmenu(optional)
+          - loader: forge
+            minecraft: '1.20.1'
+            java: '17'
+            dependencies: |
+              cloth-config(required)
+          - loader: fabric
+            minecraft: '1.21.1'
+            java: '21'
+            dependencies: |
+              cloth-config(required)
+              fabric-api(required)
+              modmenu(optional)
+          - loader: neoforge
+            minecraft: '1.21.1'
+            java: '21'
+            dependencies: |
+              cloth-config(required)
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: sol-valheim-multiloader
+          path: build/distributions
+      - name: Upload to CurseForge
+        # mc-publish v3.3; pin the action that receives the publishing token.
+        uses: Kira-NT/mc-publish@52307b03863581dec6b652b83e597aec02ebb075
+        with:
+          curseforge-id: ${{ env.CURSEFORGE_PROJECT_ID }}
+          curseforge-token: ${{ secrets.CURSEFORGE_TOKEN }}
+          files: build/distributions/sol_valheim-${{ matrix.loader }}-${{ matrix.minecraft }}-${{ needs.build.outputs.version }}.jar
+          name: SOL Valheim ${{ needs.build.outputs.version }} - ${{ matrix.loader }} ${{ matrix.minecraft }}
+          version: ${{ needs.build.outputs.version }}
+          version-type: ${{ needs.build.outputs.release_type }}
+          changelog: >-
+            ${{ inputs.changelog || format('Source and changes for {0}: https://github.com/{1}/commit/{2}', needs.build.outputs.version, github.repository, github.sha) }}
+          loaders: ${{ matrix.loader }}
+          game-versions: ${{ matrix.minecraft }}
+          java: ${{ matrix.java }}
+          environment: client | server
+          curseforge-dependencies: ${{ matrix.dependencies }}
+          fail-mode: fail

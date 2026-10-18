@@ -1,0 +1,13 @@
+// Runtime regression checks with actual NeoForge Supplementaries and Moonlight jars.
+// gradlew.bat :test --tests vice.sol_valheim.SupplementariesRuntimeChecks -I gradle/supplementaries-compat-test.gradle
+// Put the NeoForge 1.21.1 jars in build/supplementaries-compat-check,
+// or pass -PsupplementariesTestMods=<directory>.
+gradle.projectsEvaluated {
+    def root = gradle.rootProject
+    def directory = root.findProperty('supplementariesTestMods') ?: 'build/supplementaries-compat-check'
+    def mods = root.fileTree(directory) { include '*neoforge*.jar' }
+    if (mods.files.size() != 2)
+        throw new GradleException('Supply the Supplementaries and Moonlight NeoForge 1.21.1 jars for this runtime test')
+    root.dependencies.add('testRuntimeOnly', root.files(mods))
+    root.sourceSets.test.java.srcDir(root.file('src/integrationTest/java'))
+}

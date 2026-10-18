@@ -12,7 +12,7 @@ java {
 repositories { maven { url = 'https://maven.shedaniel.me/' } }
 sourceSets.main {
     java.srcDirs = [rootProject.file('common/src/main/java'), rootProject.file('common/src/versions/1.20.1/java'), 'src/main/java']
-    resources.srcDirs = [rootProject.file('common/src/main/resources'), 'src/main/resources']
+    resources.srcDirs = [rootProject.file('common/src/main/resources'), rootProject.file('common/src/versions/1.20.1/resources'), 'src/main/resources']
     resources.exclude '*.aw', '*.accesswidener'
 }
 legacyForge {

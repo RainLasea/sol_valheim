@@ -44,6 +44,8 @@
   "text.autoconfig.sol_valheim.option.common.hungerConsumptionExponent.@Tooltip": "每格扣时预算乘以（剩余时间／完整持续时间）的此指数次方。默认 0.5：剩余时间越少，扣时越少。0 为固定扣时；范围为 0～2。",
   "text.autoconfig.sol_valheim.option.common.hungerConsumesDrinks": "饥饿消耗包含饮料",
   "text.autoconfig.sol_valheim.option.common.hungerConsumesDrinks.@Tooltip": "食物与饮料格共同分担饥饿消耗。关闭后仅扣食物时间；饮料的自然倒计时仍然生效。",
+  "text.autoconfig.sol_valheim.option.common.foodBlacklist": "食物与饮料排除名单",
+  "text.autoconfig.sol_valheim.option.common.foodBlacklist.@Tooltip": "填写物品 ID 或 #物品标签 ID，排除 SOL 槽位、加成与提示。sol_valheim:excluded_foods 标签始终被排除。保留物品原本的使用行为，执行 /reload 应用修改。",
   "text.autoconfig.sol_valheim.option.common.foodConfigs": "食物自定义配置",
   "text.autoconfig.sol_valheim.option.common.foodConfigs.@Tooltip": "编辑 JSON5 配置文件以自定义每种食物。",
   "text.autoconfig.sol_valheim.option.client.useLargeIcons": "使用大食物图标",

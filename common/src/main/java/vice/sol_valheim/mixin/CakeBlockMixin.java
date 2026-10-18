@@ -19,6 +19,7 @@ import vice.sol_valheim.accessors.PlayerEntityMixinDataAccessor;
 public class CakeBlockMixin {
     @Redirect(method = "eat", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/entity/player/Player;canEat(Z)Z"))
     private static boolean canEatCake(Player player, boolean always) {
+        if (vice.sol_valheim.FoodExclusions.isExcluded(Items.CAKE)) return player.canEat(always);
         return player.isCreative() || ((PlayerEntityMixinDataAccessor) player).sol_valheim$getFoodData().canEat(Items.CAKE);
     }
     @Inject(method = "eat", at = @At("RETURN"))
