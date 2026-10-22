@@ -21,6 +21,9 @@ public class ValheimFoodData
     public List<EatenFoodItem> ItemEntries = new ArrayList<>();
     public EatenFoodItem DrinkSlot;
     public int MaxItemSlots = SOLValheim.Config.common.maxSlots;
+    private Integer maxSlotsOverride;
+    // Runtime state only: reconnecting while full re-applies datapack effects.
+    boolean fullEffectActive;
     private int nourishmentProgress;
     private double pendingHungerTicks;
 
@@ -142,6 +145,25 @@ public class ValheimFoodData
         MaxItemSlots = net.minecraft.util.Mth.clamp(slots, 2, 5);
         int capacity = foodSlotCapacity();
         if (ItemEntries.size() > capacity) ItemEntries.subList(capacity, ItemEntries.size()).clear();
+    }
+
+    public Integer getMaxSlotsOverride() {
+        return maxSlotsOverride;
+    }
+
+    public void setMaxSlotsOverride(int slots) {
+        maxSlotsOverride = net.minecraft.util.Mth.clamp(slots, 2, 5);
+        refreshMaxSlots();
+    }
+
+    public void resetMaxSlotsOverride() {
+        maxSlotsOverride = null;
+        refreshMaxSlots();
+    }
+
+    /** Keep inherited limits live without overwriting a player's persistent override. */
+    public void refreshMaxSlots() {
+        setMaxSlots(maxSlotsOverride == null ? SOLValheim.Config.common.maxSlots : maxSlotsOverride);
     }
 
     public EatenFoodItem getEatenFood(Item food) {
@@ -326,6 +348,8 @@ public class ValheimFoodData
     public CompoundTag save(CompoundTag tag, HolderLookup.Provider registries) {
         int count = 0;
         tag.putInt("max_slots", MaxItemSlots);
+        tag.remove("max_slots_override");
+        if (maxSlotsOverride != null) tag.putInt("max_slots_override", maxSlotsOverride);
         tag.putInt("count", ItemEntries.size());
         tag.putInt("nourishment_progress", nourishmentProgress);
         tag.putDouble("pending_hunger_ticks", pendingHungerTicks);
@@ -355,6 +379,8 @@ public class ValheimFoodData
         var instance = new ValheimFoodData();
 
         if (tag == null) return instance;
+        if (tag.contains("max_slots_override", Tag.TAG_ANY_NUMERIC))
+            instance.setMaxSlotsOverride(tag.getInt("max_slots_override"));
         instance.nourishmentProgress = net.minecraft.util.Mth.clamp(tag.getInt("nourishment_progress"), 0, 19);
         instance.pendingHungerTicks = finiteDouble(tag.getDouble("pending_hunger_ticks"), 1.0e12);
         int size = Math.min(Math.max(0, tag.getInt("count")), 5);
@@ -377,7 +403,7 @@ public class ValheimFoodData
             instance.DrinkSlot = new EatenFoodItem(drink, ticks, config);
             instance.DrinkSlot.hungerRemainder = finiteDouble(tag.getDouble("drink_hunger_remainder"), Math.nextDown(1.0));
         }
-        instance.setMaxSlots(SOLValheim.Config.common.maxSlots);
+        instance.refreshMaxSlots();
         return instance;
     }
 

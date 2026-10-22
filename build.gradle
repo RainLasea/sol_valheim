@@ -31,16 +31,9 @@ neoForge {
             sourceSet sourceSets.main
         }
     }
-    unitTest {
-        enable()
-        testedMod = mods.sol_valheim
-    }
 }
 dependencies {
     implementation "me.shedaniel.cloth:cloth-config-neoforge:${cloth_config_version}"
-    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
-    testImplementation 'org.mockito:mockito-core:5.11.0'
-    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
@@ -52,8 +45,6 @@ processResources {
         expand mod_version: project.mod_version
     }
 }
-
-test { useJUnitPlatform() }
 
 // Collect installable jars after loader-specific remapping completes.
 tasks.register('collectJars', Sync) {

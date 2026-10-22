@@ -61,5 +61,11 @@
   "key.sol_valheim.position": "Adjust food HUD position",
   "key.categories.sol_valheim": "SOL: Valheim",
   "commands.sol_valheim.reload.success": "SOL: Valheim configuration reloaded.",
-  "commands.sol_valheim.reload.failed": "Could not reload SOL: Valheim configuration. Check the server log."
+  "commands.sol_valheim.reload.failed": "Could not reload SOL: Valheim configuration. Check the server log.",
+  "commands.sol_valheim.slots.set": "Set food slots to %2$s for %1$s player(s).",
+  "commands.sol_valheim.slots.reset": "Restored the server default food slots for %s player(s).",
+  "commands.sol_valheim.slots.get": "%s has %s food slots.",
+  "message.sol_valheim.full_enter": "You are well fed.",
+  "message.sol_valheim.full_exit": "You are no longer well fed.",
+  "pack.sol_valheim.full_effects.description": "SOL Valheim: example effects while well fed (%s)"
 }

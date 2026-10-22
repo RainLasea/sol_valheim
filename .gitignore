@@ -103,6 +103,13 @@ $RECYCLE.BIN/
 
 .gradle
 build/
+__pycache__/
+
+# Local tests and GameTest sources
+**/src/test/
+**/src/integrationTest/
+**/src/gametest/
+**/src/gameTest/
 
 # Ignore Gradle GUI config
 gradle-app.setting

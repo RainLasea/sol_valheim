@@ -1,0 +1,10 @@
+{
+  "pack": {
+    "pack_format": 48,
+    "description": {
+      "translate": "pack.sol_valheim.full_effects.description",
+      "fallback": "SOL Valheim: example effects while well fed (%s)",
+      "with": ["1.21.1"]
+    }
+  }
+}

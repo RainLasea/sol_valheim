@@ -17,7 +17,7 @@ on:
           - beta
           - alpha
       changelog:
-        description: Optional release notes (otherwise link to the source commit)
+        description: Optional notes to include above the Git commit log
         type: string
         default: ''
 
@@ -41,6 +41,8 @@ jobs:
       release_type: ${{ steps.release.outputs.release_type }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Read version and validate release tag
         id: release
         shell: python
@@ -93,10 +95,17 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - run: chmod +x gradlew
       - run: ./gradlew build
+      - name: Generate release notes from Git commits
+        env:
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+          MANUAL_CHANGELOG: ${{ inputs.changelog }}
+        run: python .github/scripts/generate_changelog.py --output build/distributions/CHANGELOG.md
       - uses: actions/upload-artifact@v4
         with:
           name: sol-valheim-multiloader
-          path: build/distributions/*.jar
+          path: |
+            build/distributions/*.jar
+            build/distributions/CHANGELOG.md
           if-no-files-found: error
 
   publish:
@@ -151,8 +160,7 @@ jobs:
           name: SOL Valheim ${{ needs.build.outputs.version }} - ${{ matrix.loader }} ${{ matrix.minecraft }}
           version: ${{ needs.build.outputs.version }}
           version-type: ${{ needs.build.outputs.release_type }}
-          changelog: >-
-            ${{ inputs.changelog || format('Source and changes for {0}: https://github.com/{1}/commit/{2}', needs.build.outputs.version, github.repository, github.sha) }}
+          changelog-file: build/distributions/CHANGELOG.md
           loaders: ${{ matrix.loader }}
           game-versions: ${{ matrix.minecraft }}
           java: ${{ matrix.java }}

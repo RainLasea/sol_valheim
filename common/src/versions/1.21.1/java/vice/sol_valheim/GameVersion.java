@@ -55,7 +55,7 @@ public final class GameVersion {
         if (player.isCreative() || player.isSpectator()) {
             speed.removeModifier(SOLValheim.SPEED_MODIFIER); return;
         }
-        if (target >= 20 && SOLValheim.Config.common.speedBoost > 0)
+        if (FoodApi.isFull(player) && SOLValheim.Config.common.speedBoost > 0)
             replace(speed, new AttributeModifier(SOLValheim.SPEED_MODIFIER, SOLValheim.Config.common.speedBoost, AttributeModifier.Operation.ADD_MULTIPLIED_BASE));
         else speed.removeModifier(SOLValheim.SPEED_MODIFIER);
     }

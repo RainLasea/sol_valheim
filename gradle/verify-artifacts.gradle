@@ -29,6 +29,13 @@ tasks.register('verifyArtifacts') {
                 def exclusions = new JsonSlurper().parseText(new String(read("data/sol_valheim/tags/${tagDirectory}/excluded_foods.json"), 'UTF-8'))
                 if (exclusions.replace || exclusions.values != [])
                     throw new GradleException("${jarFile.name}: default food exclusion tag must be empty and additive")
+                def functionDirectory = minecraft == '1.20.1' ? 'functions' : 'function'
+                ['full_enter', 'full_tick', 'full_exit'].each { hook ->
+                    def tag = new JsonSlurper().parseText(new String(read("data/sol_valheim/tags/${functionDirectory}/${hook}.json"), 'UTF-8'))
+                    if (tag.replace || tag.values != [])
+                        throw new GradleException("${jarFile.name}: default fullness hooks must be empty and additive")
+                }
+                read('vice/sol_valheim/FoodApi.class')
                 if (info.contains('${') || !info.contains(project.version.toString()) || !info.contains(minecraft))
                     throw new GradleException("${jarFile.name}: incorrect or unexpanded metadata")
                 def mixinConfigs = ['sol_valheim-common.mixins.json']

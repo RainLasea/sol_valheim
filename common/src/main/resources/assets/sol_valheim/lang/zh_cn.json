@@ -61,5 +61,11 @@
   "key.sol_valheim.position": "调节食物 HUD 位置",
   "key.categories.sol_valheim": "SOL：英灵神殿",
   "commands.sol_valheim.reload.success": "SOL：英灵神殿配置已重新加载。",
-  "commands.sol_valheim.reload.failed": "无法重新加载 SOL：英灵神殿配置，请检查服务器日志。"
+  "commands.sol_valheim.reload.failed": "无法重新加载 SOL：英灵神殿配置，请检查服务器日志。",
+  "commands.sol_valheim.slots.set": "已将 %s 名玩家的食物槽数设为 %s。",
+  "commands.sol_valheim.slots.reset": "已将 %s 名玩家的食物槽数恢复为跟随服务器配置。",
+  "commands.sol_valheim.slots.get": "%s 的食物槽数为 %s。",
+  "message.sol_valheim.full_enter": "你吃饱了。",
+  "message.sol_valheim.full_exit": "你不再处于饱食状态。",
+  "pack.sol_valheim.full_effects.description": "SOL：英灵神殿饱食效果示例（%s）"
 }

@@ -28,7 +28,8 @@ public final class PlayerLifecycle {
                     }
                     context.getSource().sendSuccess(() -> Component.translatable("commands.sol_valheim.reload.success"), true);
                     return 1;
-                })));
+                }))
+                .then(FoodCommands.slots()));
     }
 
     /** Invoked after vanilla has applied and synchronized a successful datapack reload. */
@@ -58,8 +59,7 @@ public final class PlayerLifecycle {
     }
     public static void syncAll(ServerPlayer player) {
         ((PlayerEntityMixinDataAccessor) player).sol_valheim$getFoodData().removeExcludedFoods();
-        if (!player.isCreative() && !player.isSpectator())
-            ((PlayerEntityMixinDataAccessor) player).sol_valheim$getFoodData().setMaxSlots(SOLValheim.Config.common.maxSlots);
+        ((PlayerEntityMixinDataAccessor) player).sol_valheim$getFoodData().refreshMaxSlots();
         vice.sol_valheim.platform.Platform.syncConfig(player);
         updateAttributes(player);
         vice.sol_valheim.platform.Platform.sync(player);
@@ -74,9 +74,14 @@ public final class PlayerLifecycle {
             accessor.sol_valheim$syncFoodData();
         }
         // Freeze timers until cloning applies the death penalty once at respawn.
-        if (player.isDeadOrDying()) return;
+        if (player.isDeadOrDying()) {
+            FullnessHooks.tick(player);
+            return;
+        }
+        int previousSlots = food.MaxItemSlots;
+        food.refreshMaxSlots();
+        if (previousSlots != food.MaxItemSlots) accessor.sol_valheim$syncFoodData();
         if (!player.isCreative() && !player.isSpectator()) {
-            food.setMaxSlots(SOLValheim.Config.common.maxSlots);
             boolean wasActive = food.hasFood();
             food.tick(FarmersDelightCompat.hasNourishment(player));
             if (wasActive && !food.hasFood()) accessor.sol_valheim$syncFoodData();
@@ -86,6 +91,7 @@ public final class PlayerLifecycle {
                 player.heal(food.getRegenSpeed() / 20f);
         } else food.discardHungerCosts();
         updateAttributes(player);
+        FullnessHooks.tick(player);
 
         if (player.tickCount % 20 == 0) accessor.sol_valheim$syncFoodData();
     }
