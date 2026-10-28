@@ -1,9 +1,18 @@
 package vice.sol_valheim;
 
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
 import vice.sol_valheim.accessors.PlayerEntityMixinDataAccessor;
 
-/** Stable entry points for server scripts; mutations must run on the server thread. */
+/**
+ * Player food queries and slot overrides, exposed to KubeJS server scripts as {@code ValheimFood}.
+ * Slot mutations must run on the server thread; they update player attributes and synchronize food data.
+ * Overrides persist with the player and accept 2 to 5 total slots, including the drink slot.
+ * Resetting an override restores the configured limit. Reducing the limit discards excess food entries.
+ * {@link #getFoodInSlot(Player, int)} uses zero-based HUD order: foods first, then the drink.
+ * Indices can change as foods expire or are reordered. The returned stack is a copy retaining item data;
+ * an empty or out-of-range slot returns {@link ItemStack#EMPTY}.
+ */
 public final class FoodApi {
     private FoodApi() {}
 
@@ -14,6 +23,14 @@ public final class FoodApi {
     public static int getOccupiedSlots(Player player) {
         var food = data(player);
         return food.ItemEntries.size() + (food.DrinkSlot == null ? 0 : 1);
+    }
+
+    public static ItemStack getFoodInSlot(Player player, int index) {
+        var food = data(player);
+        if (index < 0) return ItemStack.EMPTY;
+        if (index < food.ItemEntries.size()) return food.ItemEntries.get(index).stack.copy();
+        return index == food.ItemEntries.size() && food.DrinkSlot != null
+                ? food.DrinkSlot.stack.copy() : ItemStack.EMPTY;
     }
 
     public static void setMaxSlots(Player player, int slots) {

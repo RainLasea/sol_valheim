@@ -1,5 +1,5 @@
-// Copy into kubejs/server_scripts/; no SOL Valheim KubeJS addon is required.
-const SOLFood = Java.loadClass('vice.sol_valheim.FoodApi')
+// Copy into kubejs/server_scripts/; SOL Valheim provides the ValheimFood binding.
+const SOLFood = ValheimFood
 
 PlayerEvents.loggedIn(event => {
   event.player.persistentData.putBoolean('sol_valheim_example_full', false)

@@ -1,0 +1,1 @@
+SERVER ValheimFood vice.sol_valheim.FoodApi
