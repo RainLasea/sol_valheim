@@ -296,6 +296,14 @@ public class ModConfig extends PartitioningSerializer.GlobalData {
         @ConfigEntry.Gui.Tooltip
         public boolean useProgressBar = true;
 
+        @ConfigEntry.ColorPicker(allowAlpha = true)
+        @ConfigEntry.Gui.Tooltip
+        public int slotBorderTopColor = 0x505000FF;
+
+        @ConfigEntry.ColorPicker(allowAlpha = true)
+        @ConfigEntry.Gui.Tooltip
+        public int slotBorderBottomColor = 0x5028007F;
+
         @ConfigEntry.Gui.Tooltip
         public boolean customHudPosition = false;
 

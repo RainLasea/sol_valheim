@@ -3,6 +3,7 @@ package vice.sol_valheim;
 import net.minecraft.core.Holder;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.protocol.game.ClientboundUpdateAttributesPacket;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
@@ -53,14 +54,20 @@ public final class GameVersion {
                 HEALTH_ID, "sol_valheim.food_health", SOLValheim.Config.common.startingHealth * 2 - 20,
                 AttributeModifier.Operation.ADDITION));
     }
+    public static double foodHealthModifierAmount(Player player) {
+        var modifier = player.getAttribute(Attributes.MAX_HEALTH).getModifier(HEALTH_ID);
+        return modifier == null ? Double.NaN : modifier.getAmount();
+    }
+    public static boolean updatesMaxHealth(ClientboundUpdateAttributesPacket packet) {
+        return packet.getValues().stream().anyMatch(value -> value.getAttribute().equals(Attributes.MAX_HEALTH));
+    }
     public static void updateAttributes(Player player) {
         var health = player.getAttribute(Attributes.MAX_HEALTH);
         var speed = player.getAttribute(Attributes.MOVEMENT_SPEED);
         var food = ((vice.sol_valheim.accessors.PlayerEntityMixinDataAccessor) player).sol_valheim$getFoodData();
         double target = Math.min(SOLValheim.Config.common.maxHealth * 2, SOLValheim.Config.common.startingHealth * 2 + food.getTotalFoodNutrition());
-        replace(health, new AttributeModifier(HEALTH_ID, "sol_valheim.food_health", target - 20, AttributeModifier.Operation.ADDITION),
-                !player.level().isClientSide);
-        if (player.getHealth() > player.getMaxHealth()) player.setHealth(player.getMaxHealth());
+        if (!player.level().isClientSide)
+            replace(health, new AttributeModifier(HEALTH_ID, "sol_valheim.food_health", target - 20, AttributeModifier.Operation.ADDITION), true);
         if (player.isCreative() || player.isSpectator()) {
             speed.removeModifier(SPEED_ID); return;
         }

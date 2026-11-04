@@ -4,9 +4,9 @@ package vice.sol_valheim.client;
 public record HudLayout(int x, int y, int width, int height, int iconSize) {
     public static HudLayout create(int screenWidth, int screenHeight, int rightHeight, int slots,
                                    boolean largeIcons, boolean progressBar, boolean custom, float posX, float posY) {
-        int size = largeIcons ? 18 : 12;
+        int size = largeIcons ? 20 : 14;
         int width = slots * (size + 2) - 2;
-        int height = size + (progressBar ? 4 : 0);
+        int height = size;
         int availableX = Math.max(0, screenWidth - width);
         int availableY = Math.max(0, screenHeight - height);
         int x = custom ? Math.round(availableX * posX) : screenWidth / 2 + 91 - slots * (size + 2);

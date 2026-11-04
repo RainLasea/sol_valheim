@@ -2,6 +2,8 @@ package vice.sol_valheim;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.screens.inventory.tooltip.TooltipRenderUtil;
+import net.minecraft.util.Mth;
 import net.minecraft.world.item.Items;
 import vice.sol_valheim.accessors.PlayerEntityMixinDataAccessor;
 import vice.sol_valheim.client.HudLayout;
@@ -9,8 +11,10 @@ import vice.sol_valheim.client.HudPositionScreen;
 
 public final class FoodHUD {
     private static int automaticRightHeight = 39;
+    private static boolean renderingSlotBackground;
 
     public static int automaticRightHeight() { return automaticRightHeight; }
+    public static boolean isRenderingSlotBackground() { return renderingSlotBackground; }
 
     public static void render(GuiGraphics graphics) {
         var client = Minecraft.getInstance();
@@ -26,8 +30,8 @@ public final class FoodHUD {
                 settings.customHudPosition, settings.hudPositionX, settings.hudPositionY);
         if (!settings.customHudPosition) vice.sol_valheim.platform.ClientPlatform.reserveHeight(layout.height() + 1);
         int offset = 0;
-        for (var food : data.ItemEntries) renderSlot(graphics, food, layout.slotX(offset++), layout.y(), layout.iconSize(), false);
-        if (data.DrinkSlot != null) renderSlot(graphics, data.DrinkSlot, layout.slotX(offset), layout.y(), layout.iconSize(), true);
+        for (var food : data.ItemEntries) renderSlot(graphics, food, layout.slotX(offset++), layout.y(), layout.iconSize());
+        if (data.DrinkSlot != null) renderSlot(graphics, data.DrinkSlot, layout.slotX(offset), layout.y(), layout.iconSize());
     }
 
     public static void renderPreview(GuiGraphics graphics, HudLayout layout) {
@@ -38,23 +42,29 @@ public final class FoodHUD {
             var config = ModConfig.getFoodConfig(item);
             if (config == null) continue;
             int ticks = i == 2 ? 500 : (int) (config.getTime() * (drink ? 0.8f : 0.75f / (i + 1)));
-            renderSlot(graphics, new ValheimFoodData.EatenFoodItem(item, ticks), layout.slotX(i), layout.y(), layout.iconSize(), drink);
+            renderSlot(graphics, new ValheimFoodData.EatenFoodItem(item, ticks), layout.slotX(i), layout.y(), layout.iconSize());
         }
     }
-    private static void renderSlot(GuiGraphics graphics, ValheimFoodData.EatenFoodItem food, int x, int y, int size, boolean drink) {
+    private static void renderSlot(GuiGraphics graphics, ValheimFoodData.EatenFoodItem food, int x, int y, int size) {
         var config = food.getConfig();
         if (config == null) return;
         var client = Minecraft.getInstance();
         float fraction = Math.max(0f, Math.min(1f, (float) food.ticksLeft / config.getTime()));
-        graphics.fill(x, y, x + size, y + size, drink ? 0x603468A3 : 0x60000000);
+        // Vanilla adds three pixels of padding and a one-pixel outer border.
+        renderingSlotBackground = true;
+        try {
+            TooltipRenderUtil.renderTooltipBackground(graphics, x + 4, y + 4, size - 8, size - 8, 0);
+        } finally {
+            renderingSlotBackground = false;
+        }
         if (!SOLValheim.Config.client.useProgressBar) {
-            graphics.fill(x, y + size - Math.max(1, (int) (size * fraction)), x + size, y + size,
+            graphics.fill(x + 2, y + size - 2 - Math.max(1, (int) ((size - 4) * fraction)), x + size - 2, y + size - 2,
                     food.canEatEarly() ? 0x80FF0A0A : 0x60000000);
         }
         var pose = graphics.pose();
         pose.pushPose();
-        pose.translate(x + 1, y + 1, 0);
-        float scale = (size - 2) / 16f;
+        pose.translate(x + 2, y + 2, 0);
+        float scale = (size - 4) / 16f;
         pose.scale(scale, scale, 1);
         graphics.renderItem(food.stack, 0, 0);
         pose.popPose();
@@ -62,19 +72,19 @@ public final class FoodHUD {
         pose.pushPose();
         pose.translate(0, 0, 200);
         if (SOLValheim.Config.client.useProgressBar) {
-            int barWidth = size - 2;
+            int barWidth = size - 4;
             int remainingWidth = (int) Math.ceil(barWidth * fraction);
-            int barY = y + size + 1;
-            int color = food.canEatEarly() ? 0xFFED3939 : (drink ? 0xFF6DB9ED : 0xFFDEB665);
-            graphics.fill(x + 1, barY, x + size - 1, barY + 2, 0x90000000);
+            int barY = y + size - 4;
+            int color = 0xFF000000 | Mth.hsvToRgb(fraction / 3f, 1f, 1f);
+            graphics.fill(x + 2, barY, x + size - 2, barY + 2, 0xFF000000);
             if (remainingWidth > 0) {
-                graphics.fill(x + 1, barY, x + 1 + remainingWidth, barY + 2, color);
+                graphics.fill(x + 2, barY, x + 2 + remainingWidth, barY + 1, color);
             }
         } else {
             boolean seconds = food.ticksLeft < 1200;
             String text = Integer.toString((int) Math.ceil(food.ticksLeft / (seconds ? 20.0 : 1200.0)))
                     + (seconds ? "s" : "m");
-            graphics.drawString(client.font, text, x + size - client.font.width(text), y + size - 8,
+            graphics.drawString(client.font, text, x + size - 2 - client.font.width(text), y + size - 10,
                     seconds ? 0xFFED3939 : 0xFFFFFFFF);
         }
         pose.popPose();

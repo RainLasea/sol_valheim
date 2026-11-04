@@ -3,6 +3,7 @@ package vice.sol_valheim;
 import net.minecraft.core.Holder;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.protocol.game.ClientboundUpdateAttributesPacket;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
@@ -44,14 +45,20 @@ public final class GameVersion {
                 SOLValheim.HEALTH_MODIFIER, SOLValheim.Config.common.startingHealth * 2 - 20,
                 AttributeModifier.Operation.ADD_VALUE));
     }
+    public static double foodHealthModifierAmount(Player player) {
+        var modifier = player.getAttribute(Attributes.MAX_HEALTH).getModifier(SOLValheim.HEALTH_MODIFIER);
+        return modifier == null ? Double.NaN : modifier.amount();
+    }
+    public static boolean updatesMaxHealth(ClientboundUpdateAttributesPacket packet) {
+        return packet.getValues().stream().anyMatch(value -> value.attribute().equals(Attributes.MAX_HEALTH));
+    }
     public static void updateAttributes(Player player) {
         var health = player.getAttribute(Attributes.MAX_HEALTH);
         var speed = player.getAttribute(Attributes.MOVEMENT_SPEED);
         var food = ((vice.sol_valheim.accessors.PlayerEntityMixinDataAccessor) player).sol_valheim$getFoodData();
         double target = Math.min(SOLValheim.Config.common.maxHealth * 2, SOLValheim.Config.common.startingHealth * 2 + food.getTotalFoodNutrition());
-        replace(health, new AttributeModifier(SOLValheim.HEALTH_MODIFIER, target - 20, AttributeModifier.Operation.ADD_VALUE),
-                !player.level().isClientSide);
-        if (player.getHealth() > player.getMaxHealth()) player.setHealth(player.getMaxHealth());
+        if (!player.level().isClientSide)
+            replace(health, new AttributeModifier(SOLValheim.HEALTH_MODIFIER, target - 20, AttributeModifier.Operation.ADD_VALUE), true);
         if (player.isCreative() || player.isSpectator()) {
             speed.removeModifier(SOLValheim.SPEED_MODIFIER); return;
         }

@@ -10,6 +10,7 @@ import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.commands.Commands;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.protocol.game.ClientboundUpdateAttributesPacket;
 import me.shedaniel.autoconfig.AutoConfig;
 import vice.sol_valheim.ModConfig;
 import vice.sol_valheim.SOLValheim;
@@ -96,12 +97,23 @@ public final class PlayerLifecycle {
         if (player.tickCount % 20 == 0) accessor.sol_valheim$syncFoodData();
     }
     public static void updateAttributes(Player player) {
+        float previousMaxHealth = player.getMaxHealth();
         boolean protectedMode = player.isCreative() || player.isSpectator();
         var health = ((PlayerEntityMixinDataAccessor) player).sol_valheim$getHealthData();
         if (!player.level().isClientSide && protectedMode && !player.isDeadOrDying())
             health.capture(player.getHealth());
         GameVersion.updateAttributes(player);
-        if (!player.level().isClientSide && !protectedMode) health.restore(player);
+        if (!player.level().isClientSide) {
+            if (previousMaxHealth != player.getMaxHealth())
+                player.setHealth(player.getHealth() * player.getMaxHealth() / previousMaxHealth);
+            else if (player.getHealth() > player.getMaxHealth()) player.setHealth(player.getMaxHealth());
+            if (!protectedMode) health.restore(player);
+            // The client must adjust its health baseline before vanilla's health packet arrives.
+            if (previousMaxHealth != player.getMaxHealth() && player instanceof ServerPlayer serverPlayer
+                    && serverPlayer.connection != null)
+                serverPlayer.connection.send(new ClientboundUpdateAttributesPacket(player.getId(),
+                        java.util.List.of(player.getAttribute(Attributes.MAX_HEALTH))));
+        }
     }
     public static void slept(ServerLevel level, long elapsed) {
         if (!SOLValheim.Config.common.passTicksDuringNight) return;
