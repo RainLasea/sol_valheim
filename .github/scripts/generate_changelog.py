@@ -1,4 +1,4 @@
-"""Write CurseForge release notes using the checked-out Git history."""
+"""Use player-facing release notes when available, otherwise use Git history."""
 
 import argparse
 import os
@@ -21,6 +21,10 @@ def markdown_text(value: str) -> str:
 
 
 def generate(version: str, repository: str, notes: str = "") -> str:
+    release_notes = Path(__file__).resolve().parents[2] / "changelogs" / f"{version}.md"
+    if release_notes.is_file():
+        return release_notes.read_text(encoding="utf-8").strip() + "\n"
+
     head = git("rev-parse", "HEAD").stdout.strip()
     # Exclude the tag being released when selecting the previous version.
     previous = git("describe", "--tags", "--match", "v[0-9]*", "--abbrev=0", "HEAD^", check=False)

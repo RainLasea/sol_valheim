@@ -46,11 +46,28 @@ public final class FoodApi {
         sync(player);
     }
 
-    /** Same threshold as the original speed bonus, independent of speedBoost. */
+    /**
+     * SOL's capped health target, excluding other mods' health attributes.
+     * NeoForge fires FoodHealthEvent on the server before applying starting health and the cap.
+     * The client reads the synchronized SOL modifier instead of evaluating server scripts.
+     */
+    public static double getFoodMaxHealth(Player player) {
+        if (player.level().isClientSide) {
+            double modifier = GameVersion.foodHealthModifierAmount(player);
+            if (Double.isFinite(modifier)) return 20 + modifier;
+        }
+        var food = data(player);
+        float nutrition = food.getTotalFoodNutrition();
+        if (!player.level().isClientSide)
+            nutrition = vice.sol_valheim.platform.Platform.modifyFoodHealth(player, food, nutrition);
+        return Math.min(SOLValheim.Config.common.maxHealth * 2,
+                SOLValheim.Config.common.startingHealth * 2 + nutrition);
+    }
+
+    /** Same threshold as the speed bonus, including food health adjustments and independent of speedBoost. */
     public static boolean isFull(Player player) {
         return !player.isDeadOrDying() && !player.isCreative() && !player.isSpectator()
-                && Math.min(SOLValheim.Config.common.maxHealth * 2,
-                    SOLValheim.Config.common.startingHealth * 2 + data(player).getTotalFoodNutrition()) >= 20;
+                && getFoodMaxHealth(player) >= 20;
     }
 
     private static ValheimFoodData data(Player player) {

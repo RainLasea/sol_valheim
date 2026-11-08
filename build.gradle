@@ -18,7 +18,6 @@ repositories {
 sourceSets.main {
     java.srcDirs = ['common/src/main/java', 'common/src/versions/1.21.1/java', 'neoforge/src/main/java']
     resources.srcDirs = ['common/src/main/resources', 'common/src/versions/1.21.1/resources', 'neoforge/src/main/resources']
-    resources.exclude '*.aw', '*.accesswidener'
 }
 neoForge {
     version = project.neo_version

@@ -27,7 +27,6 @@ sourceSets.main {
     resources.srcDirs = [rootProject.file('common/src/main/resources'),
                          rootProject.file("common/src/versions/${targetMinecraft}/resources"),
                          rootProject.file('fabric/src/main/resources')]
-    resources.exclude '*.aw', '*.accesswidener'
 }
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'

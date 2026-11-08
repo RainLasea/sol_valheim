@@ -4,35 +4,19 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.world.entity.ai.attributes.AttributeInstance;
-import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.commands.Commands;
-import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.game.ClientboundUpdateAttributesPacket;
 import me.shedaniel.autoconfig.AutoConfig;
-import vice.sol_valheim.ModConfig;
-import vice.sol_valheim.SOLValheim;
-import vice.sol_valheim.ValheimFoodData;
 import vice.sol_valheim.accessors.PlayerEntityMixinDataAccessor;
 import vice.sol_valheim.mixin.LivingEntityDamageAccessor;
 
+/**
+ * Player hooks shared by loader events and mixins, called on the player's game thread.
+ * {@link #updateAttributes(Player)} also adjusts current health; {@link #applyFoodModifiers(Player)}
+ * only applies modifiers, for initialization before saved or cloned health is restored.
+ */
 public final class PlayerLifecycle {
-    public static void commands(com.mojang.brigadier.CommandDispatcher<net.minecraft.commands.CommandSourceStack> dispatcher) {
-        dispatcher.register(Commands.literal("sol_valheim")
-                .requires(source -> source.hasPermission(2))
-                .then(Commands.literal("reload").executes(context -> {
-                    if (!reloadConfig(context.getSource().getServer())) {
-                        context.getSource().sendFailure(Component.translatable("commands.sol_valheim.reload.failed"));
-                        return 0;
-                    }
-                    context.getSource().sendSuccess(() -> Component.translatable("commands.sol_valheim.reload.success"), true);
-                    return 1;
-                }))
-                .then(FoodCommands.slots()));
-    }
-
     /** Invoked after vanilla has applied and synchronized a successful datapack reload. */
     public static boolean reloadConfig(MinecraftServer server) {
         var holder = AutoConfig.getConfigHolder(ModConfig.class);
@@ -54,7 +38,7 @@ public final class PlayerLifecycle {
         target.sol_valheim$setHealthData(death ? new PlayerHealthData() : PlayerHealthData.read(
                 ((PlayerEntityMixinDataAccessor) original).sol_valheim$getHealthData().save()));
         // Initialize attributes before current health, without capturing the new player's default health.
-        GameVersion.updateAttributes(player);
+        applyFoodModifiers(player);
         player.setHealth(death ? player.getMaxHealth() : original.getHealth());
         updateAttributes(player);
     }
@@ -102,7 +86,7 @@ public final class PlayerLifecycle {
         var health = ((PlayerEntityMixinDataAccessor) player).sol_valheim$getHealthData();
         if (!player.level().isClientSide && protectedMode && !player.isDeadOrDying())
             health.capture(player.getHealth());
-        GameVersion.updateAttributes(player);
+        applyFoodModifiers(player);
         if (!player.level().isClientSide) {
             if (previousMaxHealth != player.getMaxHealth())
                 player.setHealth(player.getHealth() * player.getMaxHealth() / previousMaxHealth);
@@ -115,9 +99,21 @@ public final class PlayerLifecycle {
                         java.util.List.of(player.getAttribute(Attributes.MAX_HEALTH))));
         }
     }
+    // Called from Player's constructor before the client's connection and game mode exist.
+    public static void initializeClientHealth(Player player) {
+        GameVersion.setFoodHealthBonus(player, SOLValheim.Config.common.startingHealth * 2 - 20, false);
+    }
+
+    public static void applyFoodModifiers(Player player) {
+        double target = FoodApi.getFoodMaxHealth(player);
+        if (!player.level().isClientSide) GameVersion.setFoodHealthBonus(player, target - 20, true);
+        double speedBonus = !player.isCreative() && !player.isSpectator() && FoodApi.isFull(player)
+                ? SOLValheim.Config.common.speedBoost : 0;
+        GameVersion.setFoodSpeedBonus(player, speedBonus);
+    }
+
     public static void slept(ServerLevel level, long elapsed) {
-        if (!SOLValheim.Config.common.passTicksDuringNight) return;
-        elapsed = Math.max(0, elapsed);
+        if (!SOLValheim.Config.common.passTicksDuringNight || elapsed <= 0) return;
         for (var player : level.players()) {
             if (player.isDeadOrDying() || player.isCreative() || player.isSpectator()) continue;
             ((PlayerEntityMixinDataAccessor) player).sol_valheim$getFoodData()

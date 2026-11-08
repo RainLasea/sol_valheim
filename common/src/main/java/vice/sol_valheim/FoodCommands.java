@@ -1,5 +1,6 @@
 package vice.sol_valheim;
 
+import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import net.minecraft.commands.CommandSourceStack;
@@ -7,10 +8,25 @@ import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.EntityArgument;
 import net.minecraft.network.chat.Component;
 
-final class FoodCommands {
+/** Register during the loader's command event; the root command requires permission level 2. */
+public final class FoodCommands {
     private FoodCommands() {}
 
-    static LiteralArgumentBuilder<CommandSourceStack> slots() {
+    public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
+        dispatcher.register(Commands.literal("sol_valheim")
+                .requires(source -> source.hasPermission(2))
+                .then(Commands.literal("reload").executes(context -> {
+                    if (!PlayerLifecycle.reloadConfig(context.getSource().getServer())) {
+                        context.getSource().sendFailure(Component.translatable("commands.sol_valheim.reload.failed"));
+                        return 0;
+                    }
+                    context.getSource().sendSuccess(() -> Component.translatable("commands.sol_valheim.reload.success"), true);
+                    return 1;
+                }))
+                .then(slots()));
+    }
+
+    private static LiteralArgumentBuilder<CommandSourceStack> slots() {
         return Commands.literal("slots")
                 .then(Commands.literal("set")
                         .then(Commands.argument("players", EntityArgument.players())

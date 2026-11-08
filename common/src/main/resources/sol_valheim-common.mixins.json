@@ -3,7 +3,7 @@
   "minVersion": "0.8",
   "package": "vice.sol_valheim.mixin",
   "compatibilityLevel": "JAVA_21",
-  "mixins": ["CakeBlockMixin", "FoodDataMixin", "ItemMixin", "LivingEntityDamageAccessor", "MinecraftServerMixin", "PlayerEntityMixin", "ServerPlayerHealthMixin", "OnionFoodContainerMixin"],
+  "mixins": ["CakeBlockMixin", "FoodDataMixin", "ItemMixin", "LivingEntityDamageAccessor", "MinecraftServerMixin", "PlayerEntityMixin", "ServerLevelMixin", "ServerPlayerHealthMixin", "OnionFoodContainerMixin"],
   "client": ["LocalPlayerMixin", "TooltipRenderUtilMixin", "ClientPacketListenerHealthMixin"],
   "injectors": {"defaultRequire": 1}
 }

@@ -33,7 +33,7 @@
   "text.autoconfig.sol_valheim.option.common.drinkSlotFoodEffectivenessBonus": "饮料提供的食物效能加成",
   "text.autoconfig.sol_valheim.option.common.drinkSlotFoodEffectivenessBonus.@Tooltip": "饮料生效期间，生命与恢复加成乘以（1 + 此值）。",
   "text.autoconfig.sol_valheim.option.common.passTicksDuringNight": "睡眠时推进食物计时",
-  "text.autoconfig.sol_valheim.option.common.passTicksDuringNight.@Tooltip": "计入睡眠跳过的夜间时间，且不会增加食物剩余时间。",
+  "text.autoconfig.sol_valheim.option.common.passTicksDuringNight.@Tooltip": "按睡眠实际跳过的游戏时间推进食物和饮料计时，耗尽时移除；已正常流逝的时间不会重复扣除。",
   "text.autoconfig.sol_valheim.option.common.convertHungerCosts": "将饥饿消耗转换为食物扣时",
   "text.autoconfig.sol_valheim.option.common.convertHungerCosts.@Tooltip": "扣除饥饿值或增加消耗度时，缩短当前食物的剩余时间。关闭后忽略这些消耗，仍使用食物系统替代饥饿系统。",
   "text.autoconfig.sol_valheim.option.common.hungerSecondsPerPoint": "每点饥饿值的扣时预算（秒）",

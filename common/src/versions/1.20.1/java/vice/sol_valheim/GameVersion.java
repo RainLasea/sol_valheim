@@ -14,6 +14,7 @@ import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.food.FoodProperties;
 import net.minecraft.world.item.ItemStack;
 
+/** Minecraft API differences for shared food logic, compiled separately for each target version. */
 public final class GameVersion {
     private GameVersion() {}
     public static FoodProperties makeFood(int nutrition, float saturation) { return new FoodProperties.Builder().nutrition(nutrition).saturationMod(saturation).build(); }
@@ -38,21 +39,12 @@ public final class GameVersion {
     }
     public static MobEffectInstance effectInstance(Holder<MobEffect> effect, int ticks, int amplifier) { return new MobEffectInstance(effect.value(), ticks, amplifier); }
     public static boolean hasEffect(Player player, Holder<MobEffect> effect) { return player.hasEffect(effect.value()); }
-    private static void replace(AttributeInstance attribute, AttributeModifier modifier) {
-        replace(attribute, modifier, false);
-    }
     private static void replace(AttributeInstance attribute, AttributeModifier modifier, boolean permanent) {
         var old = attribute.getModifier(modifier.getId());
         if (old != null && old.getAmount() == modifier.getAmount() && old.getOperation() == modifier.getOperation()) return;
         attribute.removeModifier(modifier.getId());
         if (permanent) attribute.addPermanentModifier(modifier);
         else attribute.addTransientModifier(modifier);
-    }
-    // Called from Player's constructor before the client's connection and game mode exist.
-    public static void initializeClientHealth(Player player) {
-        replace(player.getAttribute(Attributes.MAX_HEALTH), new AttributeModifier(
-                HEALTH_ID, "sol_valheim.food_health", SOLValheim.Config.common.startingHealth * 2 - 20,
-                AttributeModifier.Operation.ADDITION));
     }
     public static double foodHealthModifierAmount(Player player) {
         var modifier = player.getAttribute(Attributes.MAX_HEALTH).getModifier(HEALTH_ID);
@@ -61,18 +53,14 @@ public final class GameVersion {
     public static boolean updatesMaxHealth(ClientboundUpdateAttributesPacket packet) {
         return packet.getValues().stream().anyMatch(value -> value.getAttribute().equals(Attributes.MAX_HEALTH));
     }
-    public static void updateAttributes(Player player) {
-        var health = player.getAttribute(Attributes.MAX_HEALTH);
+    public static void setFoodHealthBonus(Player player, double bonus, boolean permanent) {
+        replace(player.getAttribute(Attributes.MAX_HEALTH), new AttributeModifier(
+                HEALTH_ID, "sol_valheim.food_health", bonus, AttributeModifier.Operation.ADDITION), permanent);
+    }
+    public static void setFoodSpeedBonus(Player player, double bonus) {
         var speed = player.getAttribute(Attributes.MOVEMENT_SPEED);
-        var food = ((vice.sol_valheim.accessors.PlayerEntityMixinDataAccessor) player).sol_valheim$getFoodData();
-        double target = Math.min(SOLValheim.Config.common.maxHealth * 2, SOLValheim.Config.common.startingHealth * 2 + food.getTotalFoodNutrition());
-        if (!player.level().isClientSide)
-            replace(health, new AttributeModifier(HEALTH_ID, "sol_valheim.food_health", target - 20, AttributeModifier.Operation.ADDITION), true);
-        if (player.isCreative() || player.isSpectator()) {
-            speed.removeModifier(SPEED_ID); return;
-        }
-        if (FoodApi.isFull(player) && SOLValheim.Config.common.speedBoost > 0)
-            replace(speed, new AttributeModifier(SPEED_ID, "sol_valheim.food_speed", SOLValheim.Config.common.speedBoost, AttributeModifier.Operation.MULTIPLY_BASE));
+        if (bonus > 0)
+            replace(speed, new AttributeModifier(SPEED_ID, "sol_valheim.food_speed", bonus, AttributeModifier.Operation.MULTIPLY_BASE), false);
         else speed.removeModifier(SPEED_ID);
     }
 }

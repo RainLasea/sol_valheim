@@ -26,7 +26,7 @@ public final class FoodHUD {
         if (!data.hasFood()) return;
         var settings = SOLValheim.Config.client;
         var layout = HudLayout.create(graphics.guiWidth(), graphics.guiHeight(), automaticRightHeight,
-                SOLValheim.Config.common.maxSlots, settings.useLargeIcons, settings.useProgressBar,
+                SOLValheim.Config.common.maxSlots, settings.useLargeIcons,
                 settings.customHudPosition, settings.hudPositionX, settings.hudPositionY);
         if (!settings.customHudPosition) vice.sol_valheim.platform.ClientPlatform.reserveHeight(layout.height() + 1);
         int offset = 0;

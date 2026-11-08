@@ -47,7 +47,7 @@ public final class HudPositionScreen extends WorldPreviewScreen {
     private HudLayout layout() {
         var config = SOLValheim.Config.client;
         return HudLayout.create(width, height, FoodHUD.automaticRightHeight(), SOLValheim.Config.common.maxSlots,
-                config.useLargeIcons, config.useProgressBar, custom, posX, posY);
+                config.useLargeIcons, custom, posX, posY);
     }
 
     @Override public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTicks) {

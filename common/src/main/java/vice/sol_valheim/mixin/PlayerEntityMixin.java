@@ -9,8 +9,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import vice.sol_valheim.ValheimFoodData;
 import vice.sol_valheim.PlayerHealthData;
-import vice.sol_valheim.GameVersion;
-import vice.sol_valheim.SOLValheim;
+import vice.sol_valheim.PlayerLifecycle;
 import vice.sol_valheim.accessors.PlayerEntityMixinDataAccessor;
 import vice.sol_valheim.platform.Platform;
 
@@ -37,7 +36,7 @@ public abstract class PlayerEntityMixin implements PlayerEntityMixinDataAccessor
         vice.sol_valheim.HungerCompatibility.bind(player);
         // The server initializes before tracking; the client must also start with the configured hearts.
         if (!player.level().isClientSide) return;
-        vice.sol_valheim.GameVersion.initializeClientHealth(player);
+        PlayerLifecycle.initializeClientHealth(player);
         player.setHealth(player.getMaxHealth());
     }
 
@@ -54,7 +53,7 @@ public abstract class PlayerEntityMixin implements PlayerEntityMixinDataAccessor
         if (player.level().isClientSide) return;
         // Old saves had transient attributes: vanilla may already have clamped Health to 20.
         // Do not restore the survival snapshot here; the saved game mode loads later.
-        GameVersion.updateAttributes(player);
+        PlayerLifecycle.applyFoodModifiers(player);
         if (tag.contains("Health", net.minecraft.nbt.Tag.TAG_ANY_NUMERIC)) {
             float health = tag.getFloat("Health");
             if (Float.isFinite(health) && health >= 0 && player.getHealth() != Math.min(health, player.getMaxHealth()))

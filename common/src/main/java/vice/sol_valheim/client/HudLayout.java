@@ -3,7 +3,7 @@ package vice.sol_valheim.client;
 /** Screen-relative bounds shared by the HUD and its position editor. */
 public record HudLayout(int x, int y, int width, int height, int iconSize) {
     public static HudLayout create(int screenWidth, int screenHeight, int rightHeight, int slots,
-                                   boolean largeIcons, boolean progressBar, boolean custom, float posX, float posY) {
+                                   boolean largeIcons, boolean custom, float posX, float posY) {
         int size = largeIcons ? 20 : 14;
         int width = slots * (size + 2) - 2;
         int height = size;

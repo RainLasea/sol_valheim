@@ -14,4 +14,5 @@ public final class Platform {
     public static FoodProperties foodProperties(ItemStack stack, LivingEntity entity) { return GameVersion.baseFoodProperties(stack, entity); }
     public static void sync(Player player) { FoodNetworking.sync(player); }
     public static void syncConfig(ServerPlayer player) { FoodNetworking.syncConfig(player); }
+    public static float modifyFoodHealth(Player player, vice.sol_valheim.ValheimFoodData food, float health) { return health; }
 }

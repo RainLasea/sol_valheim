@@ -33,7 +33,7 @@
   "text.autoconfig.sol_valheim.option.common.drinkSlotFoodEffectivenessBonus": "Drink effectiveness bonus",
   "text.autoconfig.sol_valheim.option.common.drinkSlotFoodEffectivenessBonus.@Tooltip": "While a drink is active, multiply health and regeneration by 1 plus this value.",
   "text.autoconfig.sol_valheim.option.common.passTicksDuringNight": "Advance food timers while sleeping",
-  "text.autoconfig.sol_valheim.option.common.passTicksDuringNight.@Tooltip": "Account for skipped night time without increasing existing timers.",
+  "text.autoconfig.sol_valheim.option.common.passTicksDuringNight.@Tooltip": "Advance food and drink timers by the game time actually skipped during sleep, removing expired entries. Time already ticked normally is not counted twice.",
   "text.autoconfig.sol_valheim.option.common.convertHungerCosts": "Convert hunger costs into food time",
   "text.autoconfig.sol_valheim.option.common.convertHungerCosts.@Tooltip": "Hunger deductions and exhaustion shorten active food timers. Disable to ignore these costs while keeping hunger replaced by the food system.",
   "text.autoconfig.sol_valheim.option.common.hungerSecondsPerPoint": "Seconds per hunger point",

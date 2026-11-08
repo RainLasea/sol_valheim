@@ -6,7 +6,6 @@
   "mixins": [
     "LivingEntityMixin",
     "SupplementariesPlatformMixin",
-    "ServerLevelMixin",
     "ServerPlayerMixin"
   ],
   "client": [
